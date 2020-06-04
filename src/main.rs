@@ -18,6 +18,7 @@ const VERTEX_SHADER: &str = include_str!("default.vert");
 const FRAGMENT_SHADER: &str = include_str!("default.frag");
 
 fn main() {
+    let aspect_ratio = 16.0 / 9.0;
     let event_loop = EventLoop::new();
     let monitor = event_loop.primary_monitor();
     let PhysicalSize { width, height } = monitor.size();
@@ -41,8 +42,38 @@ fn main() {
     context.window().set_visible(true);
 
     let vertices: [GLfloat; 32] = [
-        -0.5, 0.5, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.5, 0.5, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, -0.5,
-        -0.5, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.5, -0.5, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0,
+        -0.5 / aspect_ratio,
+        0.5,
+        0.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        0.5 / aspect_ratio,
+        0.5,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        -0.5 / aspect_ratio,
+        -0.5,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.5 / aspect_ratio,
+        -0.5,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        1.0,
+        0.0,
     ];
     let indices: [GLint; 6] = [0, 1, 2, 1, 2, 3];
 
@@ -98,10 +129,6 @@ fn main() {
 
     let shader_program = ShaderProgram::new(VERTEX_SHADER, FRAGMENT_SHADER).unwrap();
 
-    let img = image::open("container.jpg").unwrap();
-    let (width, height) = img.dimensions();
-    let data = img.flipv().into_rgb().into_raw();
-
     let mut textures = [0; 2];
     unsafe {
         gl::GenTextures(2, textures.as_mut_ptr());
@@ -111,6 +138,10 @@ fn main() {
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+
+        let img = image::open("container.jpg").unwrap();
+        let (width, height) = img.dimensions();
+        let data = img.flipv().into_rgb().into_raw();
         gl::TexImage2D(
             gl::TEXTURE_2D,
             0,
@@ -123,6 +154,29 @@ fn main() {
             data.as_ptr() as *const c_void,
         );
         gl::GenerateMipmap(gl::TEXTURE_2D);
+
+        gl::ActiveTexture(gl::TEXTURE1);
+        gl::BindTexture(gl::TEXTURE_2D, textures[1]);
+
+        let img = image::open("awesomeface.png").unwrap();
+        let (width, height) = img.dimensions();
+        let data = img.flipv().into_rgba().into_raw();
+        gl::TexImage2D(
+            gl::TEXTURE_2D,
+            0,
+            gl::RGB as i32,
+            width as i32,
+            height as i32,
+            0,
+            gl::RGBA,
+            gl::UNSIGNED_BYTE,
+            data.as_ptr() as *const c_void,
+        );
+        gl::GenerateMipmap(gl::TEXTURE_2D);
+
+        shader_program.use_program();
+        shader_program.set_uniform_int("textureSampler", 0);
+        shader_program.set_uniform_int("textureSampler2", 1);
     }
 
     event_loop.run(move |event, _, control_flow| {
@@ -155,7 +209,9 @@ fn main() {
                     gl::Clear(gl::COLOR_BUFFER_BIT);
                     shader_program.use_program();
                     gl::ActiveTexture(gl::TEXTURE0);
-                    gl::BindTexture(gl::TEXTURE_2D, texture);
+                    gl::BindTexture(gl::TEXTURE_2D, textures[0]);
+                    gl::ActiveTexture(gl::TEXTURE1);
+                    gl::BindTexture(gl::TEXTURE_2D, textures[1]);
                     gl::BindVertexArray(vaos[0]);
                     gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null());
                 }
