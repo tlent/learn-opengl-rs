@@ -1,7 +1,8 @@
 use std::ffi::{c_void, CString};
 use std::mem;
 use std::ptr;
-use std::{str, time::Instant};
+use std::str;
+use std::time::Instant;
 
 use anyhow::{anyhow, Result};
 use gl::types::*;
@@ -46,19 +47,28 @@ fn main() {
     unsafe {
         gl::Viewport(x_offset, y_offset, width, height);
         gl::ClearColor(0.0, 0.0, 0.0, 1.0);
-        gl::Clear(gl::COLOR_BUFFER_BIT);
+        gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+        gl::Enable(gl::DEPTH_TEST);
     }
-    context.window().set_visible(true);
     let start = Instant::now();
+    context.window().set_visible(true);
 
-    let vertices: [GLfloat; 20] = [
-        -0.5, 0.5, 0.0, 0.0, 1.0, 0.5, 0.5, 0.0, 1.0, 1.0, -0.5, -0.5, 0.0, 0.0, 0.0, 0.5, -0.5,
-        0.0, 1.0, 0.0,
+    let vertices: [GLfloat; 36 * 5] = [
+        -0.5, -0.5, -0.5, 0.0, 0.0, 0.5, -0.5, -0.5, 1.0, 0.0, 0.5, 0.5, -0.5, 1.0, 1.0, 0.5, 0.5,
+        -0.5, 1.0, 1.0, -0.5, 0.5, -0.5, 0.0, 1.0, -0.5, -0.5, -0.5, 0.0, 0.0, -0.5, -0.5, 0.5,
+        0.0, 0.0, 0.5, -0.5, 0.5, 1.0, 0.0, 0.5, 0.5, 0.5, 1.0, 1.0, 0.5, 0.5, 0.5, 1.0, 1.0, -0.5,
+        0.5, 0.5, 0.0, 1.0, -0.5, -0.5, 0.5, 0.0, 0.0, -0.5, 0.5, 0.5, 1.0, 0.0, -0.5, 0.5, -0.5,
+        1.0, 1.0, -0.5, -0.5, -0.5, 0.0, 1.0, -0.5, -0.5, -0.5, 0.0, 1.0, -0.5, -0.5, 0.5, 0.0,
+        0.0, -0.5, 0.5, 0.5, 1.0, 0.0, 0.5, 0.5, 0.5, 1.0, 0.0, 0.5, 0.5, -0.5, 1.0, 1.0, 0.5,
+        -0.5, -0.5, 0.0, 1.0, 0.5, -0.5, -0.5, 0.0, 1.0, 0.5, -0.5, 0.5, 0.0, 0.0, 0.5, 0.5, 0.5,
+        1.0, 0.0, -0.5, -0.5, -0.5, 0.0, 1.0, 0.5, -0.5, -0.5, 1.0, 1.0, 0.5, -0.5, 0.5, 1.0, 0.0,
+        0.5, -0.5, 0.5, 1.0, 0.0, -0.5, -0.5, 0.5, 0.0, 0.0, -0.5, -0.5, -0.5, 0.0, 1.0, -0.5, 0.5,
+        -0.5, 0.0, 1.0, 0.5, 0.5, -0.5, 1.0, 1.0, 0.5, 0.5, 0.5, 1.0, 0.0, 0.5, 0.5, 0.5, 1.0, 0.0,
+        -0.5, 0.5, 0.5, 0.0, 0.0, -0.5, 0.5, -0.5, 0.0, 1.0,
     ];
-    let indices: [GLint; 6] = [0, 1, 2, 1, 2, 3];
 
     let mut vaos = [0; 1];
-    let mut vbos = [0; 2];
+    let mut vbos = [0; 1];
     unsafe {
         gl::GenVertexArrays(vaos.len() as i32, vaos.as_mut_ptr());
         gl::BindVertexArray(vaos[0]);
@@ -88,14 +98,6 @@ fn main() {
             (3 * mem::size_of::<GLfloat>()) as *const c_void,
         );
         gl::EnableVertexAttribArray(1);
-
-        gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, vbos[1]);
-        gl::BufferData(
-            gl::ELEMENT_ARRAY_BUFFER,
-            (indices.len() * mem::size_of::<GLint>()) as isize,
-            indices.as_ptr() as *const c_void,
-            gl::STATIC_DRAW,
-        );
     }
 
     let shader_program = ShaderProgram::new(VERTEX_SHADER, FRAGMENT_SHADER).unwrap();
@@ -158,6 +160,31 @@ fn main() {
         gl::BindTexture(gl::TEXTURE_2D, textures[1]);
     }
 
+    let cube_positions = [
+        glm::vec3(0.0, 0.0, 0.0),
+        glm::vec3(2.0, 5.0, -15.0),
+        glm::vec3(-1.5, -2.2, -2.5),
+        glm::vec3(-3.8, -2.0, -12.3),
+        glm::vec3(2.4, -0.4, -3.5),
+        glm::vec3(-1.7, 3.0, -7.5),
+        glm::vec3(1.3, -2.0, -2.5),
+        glm::vec3(1.5, 2.0, -2.5),
+        glm::vec3(1.5, 0.2, -1.5),
+        glm::vec3(-1.3, 1.0, -1.5),
+    ];
+
+    let mut model = glm::Mat4::identity();
+    let view = glm::translate(&glm::Mat4::identity(), &glm::vec3(0.0, 0.0, -3.0));
+    let projection = glm::perspective(4.0 / 3.0, 45.0f32.to_radians(), 0.1, 100.0);
+
+    unsafe {
+        for &(name, val) in &[("view", view), ("projection", projection)] {
+            let loc =
+                gl::GetUniformLocation(shader_program.id(), CString::new(name).unwrap().as_ptr());
+            gl::UniformMatrix4fv(loc, 1, gl::FALSE, glm::value_ptr(&val).as_ptr());
+        }
+    }
+
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
         match event {
@@ -192,41 +219,28 @@ fn main() {
             },
             Event::MainEventsCleared => {
                 let time = (Instant::now() - start).as_secs_f32();
-
-                let mut transform = glm::Mat4::identity();
-                transform = glm::translate(&transform, &glm::vec3(0.5, -0.5, 0.0));
-                transform = glm::rotate(&transform, time, &glm::vec3(0.0, 0.0, 1.0));
-
-                let mut transform2 = glm::Mat4::identity();
-                transform2 = glm::translate(&transform2, &glm::vec3(-0.5, 0.5, 0.0));
-                let s = time.sin().abs();
-                transform2 = glm::scale(&transform2, &glm::vec3(s, s, s));
                 unsafe {
-                    gl::ClearColor(0.0, 0.0, 0.0, 1.0);
-                    gl::Clear(gl::COLOR_BUFFER_BIT);
+                    gl::ClearColor(0.2, 0.3, 0.3, 1.0);
+                    gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
                     shader_program.use_program();
                     gl::BindVertexArray(vaos[0]);
 
-                    let transform_loc = gl::GetUniformLocation(
-                        shader_program.id(),
-                        CString::new("transform").unwrap().as_ptr(),
-                    );
+                    for (i, p) in cube_positions.iter().enumerate() {
+                        model = glm::translate(&glm::Mat4::identity(), p);
+                        let angle = if i % 3 == 0 {
+                            time
+                        } else {
+                            (20.0 * i as f32).to_radians()
+                        };
+                        model = glm::rotate(&model, angle, &glm::vec3(1.0, 0.3, 0.5));
+                        let loc = gl::GetUniformLocation(
+                            shader_program.id(),
+                            CString::new("model").unwrap().as_ptr(),
+                        );
+                        gl::UniformMatrix4fv(loc, 1, gl::FALSE, glm::value_ptr(&model).as_ptr());
 
-                    gl::UniformMatrix4fv(
-                        transform_loc,
-                        1,
-                        gl::FALSE,
-                        glm::value_ptr(&transform).as_ptr(),
-                    );
-                    gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null());
-
-                    gl::UniformMatrix4fv(
-                        transform_loc,
-                        1,
-                        gl::FALSE,
-                        glm::value_ptr(&transform2).as_ptr(),
-                    );
-                    gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null());
+                        gl::DrawArrays(gl::TRIANGLES, 0, 36);
+                    }
                 }
 
                 context.swap_buffers().unwrap();
