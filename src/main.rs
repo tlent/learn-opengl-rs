@@ -1,14 +1,14 @@
 use std::ffi::{c_void, CString};
 use std::mem;
 use std::ptr;
-use std::str;
+use std::{str, time::Instant};
 
 use anyhow::{anyhow, Result};
 use gl::types::*;
 use glutin::{Api, ContextBuilder, GlProfile, GlRequest};
 use image::GenericImageView;
+use nalgebra_glm as glm;
 use winit::{
-    dpi::PhysicalSize,
     event::{ElementState, Event, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::{Fullscreen, WindowBuilder},
@@ -18,10 +18,9 @@ const VERTEX_SHADER: &str = include_str!("default.vert");
 const FRAGMENT_SHADER: &str = include_str!("default.frag");
 
 fn main() {
-    let aspect_ratio = 16.0 / 9.0;
     let event_loop = EventLoop::new();
     let monitor = event_loop.primary_monitor();
-    let PhysicalSize { width, height } = monitor.size();
+    let monitor_size = monitor.size();
     let window_builder = WindowBuilder::new()
         .with_visible(false)
         .with_title("Learn OpenGL")
@@ -34,46 +33,27 @@ fn main() {
         .unwrap();
     let context = unsafe { context.make_current().unwrap() };
     gl::load_with(|s| context.get_proc_address(s));
+
+    let (width, height) = (800, 600);
+    let mut x_offset = (monitor_size.width as i32 / 2) - (width / 2);
+    if x_offset < 0 {
+        x_offset = 0;
+    }
+    let mut y_offset = (monitor_size.height as i32 / 2) - (height / 2);
+    if y_offset < 0 {
+        y_offset = 0;
+    }
     unsafe {
-        gl::Viewport(0, 0, width as i32, height as i32);
+        gl::Viewport(x_offset, y_offset, width, height);
         gl::ClearColor(0.0, 0.0, 0.0, 1.0);
         gl::Clear(gl::COLOR_BUFFER_BIT);
     }
     context.window().set_visible(true);
+    let start = Instant::now();
 
-    let vertices: [GLfloat; 32] = [
-        -0.5 / aspect_ratio,
-        0.5,
-        0.0,
-        1.0,
-        1.0,
-        0.0,
-        0.0,
-        1.0,
-        0.5 / aspect_ratio,
-        0.5,
-        0.0,
-        1.0,
-        0.0,
-        0.0,
-        1.0,
-        1.0,
-        -0.5 / aspect_ratio,
-        -0.5,
-        0.0,
-        0.0,
-        0.0,
-        1.0,
-        0.0,
-        0.0,
-        0.5 / aspect_ratio,
-        -0.5,
-        0.0,
-        0.0,
-        1.0,
-        0.0,
-        1.0,
-        0.0,
+    let vertices: [GLfloat; 20] = [
+        -0.5, 0.5, 0.0, 0.0, 1.0, 0.5, 0.5, 0.0, 1.0, 1.0, -0.5, -0.5, 0.0, 0.0, 0.0, 0.5, -0.5,
+        0.0, 1.0, 0.0,
     ];
     let indices: [GLint; 6] = [0, 1, 2, 1, 2, 3];
 
@@ -95,28 +75,19 @@ fn main() {
             3,
             gl::FLOAT,
             gl::FALSE,
-            8 * mem::size_of::<GLfloat>() as i32,
+            5 * mem::size_of::<GLfloat>() as i32,
             ptr::null(),
         );
         gl::EnableVertexAttribArray(0);
         gl::VertexAttribPointer(
             1,
-            3,
+            2,
             gl::FLOAT,
             gl::FALSE,
-            8 * mem::size_of::<GLfloat>() as i32,
+            5 * mem::size_of::<GLfloat>() as i32,
             (3 * mem::size_of::<GLfloat>()) as *const c_void,
         );
         gl::EnableVertexAttribArray(1);
-        gl::VertexAttribPointer(
-            2,
-            2,
-            gl::FLOAT,
-            gl::FALSE,
-            8 * mem::size_of::<GLfloat>() as i32,
-            (6 * mem::size_of::<GLfloat>()) as *const c_void,
-        );
-        gl::EnableVertexAttribArray(2);
 
         gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, vbos[1]);
         gl::BufferData(
@@ -136,7 +107,11 @@ fn main() {
         gl::BindTexture(gl::TEXTURE_2D, textures[0]);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as i32);
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+        gl::TexParameteri(
+            gl::TEXTURE_2D,
+            gl::TEXTURE_MIN_FILTER,
+            gl::LINEAR_MIPMAP_LINEAR as i32,
+        );
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
 
         let img = image::open("container.jpg").unwrap();
@@ -177,6 +152,10 @@ fn main() {
         shader_program.use_program();
         shader_program.set_uniform_int("textureSampler", 0);
         shader_program.set_uniform_int("textureSampler2", 1);
+        gl::ActiveTexture(gl::TEXTURE0);
+        gl::BindTexture(gl::TEXTURE_2D, textures[0]);
+        gl::ActiveTexture(gl::TEXTURE1);
+        gl::BindTexture(gl::TEXTURE_2D, textures[1]);
     }
 
     event_loop.run(move |event, _, control_flow| {
@@ -198,21 +177,55 @@ fn main() {
                 }
             }
             Event::WindowEvent {
-                event: WindowEvent::Resized(PhysicalSize { width, height }),
+                event: WindowEvent::Resized(window_size),
                 ..
             } => unsafe {
-                gl::Viewport(0, 0, width as i32, height as i32);
+                let mut x_offset = (window_size.width as i32 / 2) - (width / 2);
+                if x_offset < 0 {
+                    x_offset = 0;
+                }
+                let mut y_offset = (window_size.height as i32 / 2) - (height / 2);
+                if y_offset < 0 {
+                    y_offset = 0;
+                }
+                gl::Viewport(x_offset, y_offset, width, height);
             },
             Event::MainEventsCleared => {
+                let time = (Instant::now() - start).as_secs_f32();
+
+                let mut transform = glm::Mat4::identity();
+                transform = glm::translate(&transform, &glm::vec3(0.5, -0.5, 0.0));
+                transform = glm::rotate(&transform, time, &glm::vec3(0.0, 0.0, 1.0));
+
+                let mut transform2 = glm::Mat4::identity();
+                transform2 = glm::translate(&transform2, &glm::vec3(-0.5, 0.5, 0.0));
+                let s = time.sin().abs();
+                transform2 = glm::scale(&transform2, &glm::vec3(s, s, s));
                 unsafe {
                     gl::ClearColor(0.0, 0.0, 0.0, 1.0);
                     gl::Clear(gl::COLOR_BUFFER_BIT);
                     shader_program.use_program();
-                    gl::ActiveTexture(gl::TEXTURE0);
-                    gl::BindTexture(gl::TEXTURE_2D, textures[0]);
-                    gl::ActiveTexture(gl::TEXTURE1);
-                    gl::BindTexture(gl::TEXTURE_2D, textures[1]);
                     gl::BindVertexArray(vaos[0]);
+
+                    let transform_loc = gl::GetUniformLocation(
+                        shader_program.id(),
+                        CString::new("transform").unwrap().as_ptr(),
+                    );
+
+                    gl::UniformMatrix4fv(
+                        transform_loc,
+                        1,
+                        gl::FALSE,
+                        glm::value_ptr(&transform).as_ptr(),
+                    );
+                    gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null());
+
+                    gl::UniformMatrix4fv(
+                        transform_loc,
+                        1,
+                        gl::FALSE,
+                        glm::value_ptr(&transform2).as_ptr(),
+                    );
                     gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null());
                 }
 
