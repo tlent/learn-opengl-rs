@@ -1,19 +1,23 @@
 use std::ffi::{c_void, CString};
 use std::mem;
 use std::ptr;
-use std::str;
 use std::time::Instant;
 
-use anyhow::{anyhow, Result};
 use gl::types::*;
 use glutin::{Api, ContextBuilder, GlProfile, GlRequest};
 use image::GenericImageView;
 use nalgebra_glm as glm;
 use winit::{
-    event::{ElementState, Event, VirtualKeyCode, WindowEvent},
+    event::{DeviceEvent, ElementState, Event, MouseScrollDelta, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::{Fullscreen, WindowBuilder},
 };
+
+mod camera;
+mod shader_program;
+
+use camera::{Camera, CameraMotion};
+use shader_program::ShaderProgram;
 
 const VERTEX_SHADER: &str = include_str!("default.vert");
 const FRAGMENT_SHADER: &str = include_str!("default.frag");
@@ -23,7 +27,6 @@ fn main() {
     let monitor = event_loop.primary_monitor();
     let monitor_size = monitor.size();
     let window_builder = WindowBuilder::new()
-        .with_visible(false)
         .with_title("Learn OpenGL")
         .with_fullscreen(Some(Fullscreen::Borderless(monitor)));
     let context = ContextBuilder::new()
@@ -35,7 +38,7 @@ fn main() {
     let context = unsafe { context.make_current().unwrap() };
     gl::load_with(|s| context.get_proc_address(s));
 
-    let (width, height) = (800, 600);
+    let (width, height) = (1920, 1080);
     let mut x_offset = (monitor_size.width as i32 / 2) - (width / 2);
     if x_offset < 0 {
         x_offset = 0;
@@ -51,7 +54,8 @@ fn main() {
         gl::Enable(gl::DEPTH_TEST);
     }
     let start = Instant::now();
-    context.window().set_visible(true);
+    context.window().set_cursor_grab(true).unwrap();
+    context.window().set_cursor_visible(false);
 
     let vertices: [GLfloat; 36 * 5] = [
         -0.5, -0.5, -0.5, 0.0, 0.0, 0.5, -0.5, -0.5, 1.0, 0.0, 0.5, 0.5, -0.5, 1.0, 1.0, 0.5, 0.5,
@@ -173,18 +177,18 @@ fn main() {
         glm::vec3(-1.3, 1.0, -1.5),
     ];
 
-    let mut model = glm::Mat4::identity();
-    let view = glm::translate(&glm::Mat4::identity(), &glm::vec3(0.0, 0.0, -3.0));
-    let projection = glm::perspective(4.0 / 3.0, 45.0f32.to_radians(), 0.1, 100.0);
+    let mut last_frame = Instant::now();
+    let mut delta_time = 0.0f32;
+    let mut pressed_keys = Vec::with_capacity(10);
+    let mut mouse_delta = (0.0, 0.0);
+    let mut scroll_delta = 0.0;
 
-    unsafe {
-        for &(name, val) in &[("view", view), ("projection", projection)] {
-            let loc =
-                gl::GetUniformLocation(shader_program.id(), CString::new(name).unwrap().as_ptr());
-            gl::UniformMatrix4fv(loc, 1, gl::FALSE, glm::value_ptr(&val).as_ptr());
-        }
-    }
-
+    let mut camera = Camera::new(
+        glm::vec3(0.0, 0.0, 3.0),
+        glm::vec3(0.0, 1.0, 0.0),
+        -90.0,
+        0.0,
+    );
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
         match event {
@@ -195,13 +199,40 @@ fn main() {
             Event::WindowEvent {
                 event: WindowEvent::KeyboardInput { input, .. },
                 ..
-            } => {
-                if input.state == ElementState::Pressed {
-                    match input.virtual_keycode {
-                        Some(VirtualKeyCode::Escape) => *control_flow = ControlFlow::Exit,
-                        _ => {}
+            } => match input.state {
+                ElementState::Pressed => match input.virtual_keycode {
+                    Some(VirtualKeyCode::Escape) => *control_flow = ControlFlow::Exit,
+                    Some(key) => {
+                        if !pressed_keys.contains(&key) {
+                            pressed_keys.push(key)
+                        }
                     }
-                }
+                    _ => {}
+                },
+                ElementState::Released => match input.virtual_keycode {
+                    Some(key) => {
+                        if let Some(i) = pressed_keys.iter().position(|&k| k == key) {
+                            pressed_keys.swap_remove(i);
+                        }
+                    }
+                    _ => {}
+                },
+            },
+            Event::DeviceEvent {
+                event: DeviceEvent::MouseMotion { delta: (dx, dy) },
+                ..
+            } => {
+                let (x, y) = mouse_delta;
+                mouse_delta = (x + dx as f32, y - dy as f32);
+            }
+            Event::DeviceEvent {
+                event:
+                    DeviceEvent::MouseWheel {
+                        delta: MouseScrollDelta::LineDelta(_, dy),
+                    },
+                ..
+            } => {
+                scroll_delta += dy / 15.0;
             }
             Event::WindowEvent {
                 event: WindowEvent::Resized(window_size),
@@ -218,15 +249,45 @@ fn main() {
                 gl::Viewport(x_offset, y_offset, width, height);
             },
             Event::MainEventsCleared => {
-                let time = (Instant::now() - start).as_secs_f32();
+                let now = Instant::now();
+                let time = (now - start).as_secs_f32();
+                delta_time = (now - last_frame).as_secs_f32();
+                last_frame = now;
+
+                for key in pressed_keys.iter() {
+                    match key {
+                        VirtualKeyCode::W => camera.move_(CameraMotion::Forward, delta_time),
+                        VirtualKeyCode::S => camera.move_(CameraMotion::Backward, delta_time),
+                        VirtualKeyCode::A => camera.move_(CameraMotion::Left, delta_time),
+                        VirtualKeyCode::D => camera.move_(CameraMotion::Right, delta_time),
+                        _ => {}
+                    }
+                }
+                camera.look(mouse_delta);
+                mouse_delta = (0.0, 0.0);
+                camera.zoom(scroll_delta);
+                scroll_delta = 0.0;
+
+                let projection =
+                    glm::perspective(16.0 / 9.0, camera.fov().to_radians(), 0.1, 100.0);
+
                 unsafe {
                     gl::ClearColor(0.2, 0.3, 0.3, 1.0);
                     gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
                     shader_program.use_program();
                     gl::BindVertexArray(vaos[0]);
 
+                    let view = camera.view_matrix();
+                    for &(name, val) in &[("view", view), ("projection", projection)] {
+                        let loc = gl::GetUniformLocation(
+                            shader_program.id(),
+                            CString::new(name).unwrap().as_ptr(),
+                        );
+                        gl::UniformMatrix4fv(loc, 1, gl::FALSE, glm::value_ptr(&val).as_ptr());
+                    }
+
                     for (i, p) in cube_positions.iter().enumerate() {
-                        model = glm::translate(&glm::Mat4::identity(), p);
+                        let mut model = glm::translate(&glm::Mat4::identity(), p);
                         let angle = if i % 3 == 0 {
                             time
                         } else {
@@ -248,105 +309,4 @@ fn main() {
             _ => (),
         }
     });
-}
-
-pub struct ShaderProgram {
-    id: u32,
-}
-
-impl ShaderProgram {
-    pub fn new(vertex_shader: &str, fragment_shader: &str) -> Result<Self> {
-        let mut shaders = vec![];
-        for &(s, t) in &[
-            (vertex_shader, gl::VERTEX_SHADER),
-            (fragment_shader, gl::FRAGMENT_SHADER),
-        ] {
-            let id = unsafe { gl::CreateShader(t) };
-            let source = CString::new(s).unwrap();
-            unsafe {
-                gl::ShaderSource(id, 1, &source.as_ptr(), ptr::null());
-                gl::CompileShader(id);
-            }
-
-            let mut success = gl::FALSE as GLint;
-            unsafe {
-                gl::GetShaderiv(id, gl::COMPILE_STATUS, &mut success);
-            }
-            if success != gl::TRUE as GLint {
-                for shader in shaders {
-                    unsafe { gl::DeleteShader(shader) };
-                }
-                let mut message = vec![0; 512];
-                unsafe {
-                    gl::GetShaderInfoLog(
-                        id,
-                        512,
-                        ptr::null_mut(),
-                        message.as_mut_ptr() as *mut GLchar,
-                    );
-                    message.set_len(message.iter().position(|&v| v == 0).unwrap_or(512));
-                }
-                return Err(anyhow!(
-                    "ERROR::SHADER::COMPILATION_FAILED:\n{}",
-                    str::from_utf8(&message).unwrap()
-                ));
-            }
-            shaders.push(id);
-        }
-
-        let id = unsafe { gl::CreateProgram() };
-        for &shader in shaders.iter() {
-            unsafe { gl::AttachShader(id, shader) };
-        }
-        unsafe {
-            gl::LinkProgram(id);
-        }
-        for shader in shaders {
-            unsafe { gl::DeleteShader(shader) };
-        }
-        let mut success = gl::FALSE as GLint;
-        unsafe {
-            gl::GetProgramiv(id, gl::LINK_STATUS, &mut success);
-        }
-        if success != gl::TRUE as GLint {
-            let mut message = vec![0; 512];
-            unsafe {
-                gl::GetProgramInfoLog(
-                    id,
-                    512,
-                    ptr::null_mut(),
-                    message.as_mut_ptr() as *mut GLchar,
-                );
-                message.set_len(message.iter().position(|&v| v == 0).unwrap_or(512));
-            }
-            return Err(anyhow!(
-                "ERROR::SHADER::PROGRAM::LINKING_FAILED:\n{}",
-                str::from_utf8(&message).unwrap()
-            ));
-        }
-        Ok(Self { id })
-    }
-
-    pub fn id(&self) -> u32 {
-        self.id
-    }
-
-    pub unsafe fn use_program(&self) {
-        gl::UseProgram(self.id);
-    }
-
-    pub unsafe fn set_uniform_bool(&self, name: &str, value: bool) {
-        let location = gl::GetUniformLocation(self.id, CString::new(name).unwrap().as_ptr());
-        gl::Uniform1i(location, value as i32);
-    }
-
-    pub unsafe fn set_uniform_int(&self, name: &str, value: i32) {
-        let location = gl::GetUniformLocation(self.id, CString::new(name).unwrap().as_ptr());
-        gl::Uniform1i(location, value);
-    }
-
-    pub unsafe fn set_uniform_float(&self, name: &str, value: f32) {
-        let location = gl::GetUniformLocation(self.id, CString::new(name).unwrap().as_ptr());
-        gl::Uniform1f(location, value);
-    }
 }
