@@ -4,6 +4,7 @@ use std::str;
 
 use anyhow::{anyhow, Result};
 use gl::types::*;
+use nalgebra_glm as glm;
 
 pub struct ShaderProgram {
     id: u32,
@@ -91,17 +92,31 @@ impl ShaderProgram {
     }
 
     pub unsafe fn set_uniform_bool(&self, name: &str, value: bool) {
-        let location = gl::GetUniformLocation(self.id, CString::new(name).unwrap().as_ptr());
+        let location = self.get_uniform_location(name);
         gl::Uniform1i(location, value as i32);
     }
 
     pub unsafe fn set_uniform_int(&self, name: &str, value: i32) {
-        let location = gl::GetUniformLocation(self.id, CString::new(name).unwrap().as_ptr());
+        let location = self.get_uniform_location(name);
         gl::Uniform1i(location, value);
     }
 
     pub unsafe fn set_uniform_float(&self, name: &str, value: f32) {
-        let location = gl::GetUniformLocation(self.id, CString::new(name).unwrap().as_ptr());
+        let location = self.get_uniform_location(name);
         gl::Uniform1f(location, value);
+    }
+
+    pub unsafe fn set_uniform_vec3f(&self, name: &str, value: glm::Vec3) {
+        let location = self.get_uniform_location(name);
+        gl::Uniform3fv(location, 1, value.as_ptr());
+    }
+
+    pub unsafe fn set_uniform_mat4f(&self, name: &str, value: glm::Mat4) {
+        let location = self.get_uniform_location(name);
+        gl::UniformMatrix4fv(location, 1, gl::FALSE, value.as_ptr());
+    }
+
+    unsafe fn get_uniform_location(&self, name: &str) -> i32 {
+        gl::GetUniformLocation(self.id, CString::new(name).unwrap().as_ptr())
     }
 }
