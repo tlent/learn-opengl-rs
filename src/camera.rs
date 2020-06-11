@@ -40,13 +40,20 @@ impl Camera {
         glm::look_at(&self.position, &(self.position + self.front), &self.up)
     }
 
-    pub fn move_(&mut self, direction: CameraMotion, delta_t: f32) {
-        let d = SPEED * delta_t;
-        match direction {
-            CameraMotion::Forward => self.position += self.front * d,
-            CameraMotion::Backward => self.position -= self.front * d,
-            CameraMotion::Left => self.position -= self.right * d,
-            CameraMotion::Right => self.position += self.right * d,
+    pub fn move_(&mut self, directions: &[CameraMotion], delta_time: f32) {
+        let mut velocity = glm::vec3(0.0, 0.0, 0.0);
+        for d in directions {
+            match d {
+                CameraMotion::Forward => velocity += self.front,
+                CameraMotion::Backward => velocity -= self.front,
+                CameraMotion::Right => velocity += self.right,
+                CameraMotion::Left => velocity -= self.right,
+                CameraMotion::Up => velocity += self.up,
+                CameraMotion::Down => velocity -= self.up,
+            }
+        }
+        if velocity != glm::vec3(0.0, 0.0, 0.0) {
+            self.position += SPEED * velocity.normalize() * delta_time;
         }
     }
 
@@ -89,4 +96,6 @@ pub enum CameraMotion {
     Backward,
     Left,
     Right,
+    Up,
+    Down,
 }

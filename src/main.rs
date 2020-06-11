@@ -25,7 +25,6 @@ const FRAGMENT_SHADER: &str = include_str!("default.frag");
 fn main() {
     let event_loop = EventLoop::new();
     let monitor = event_loop.primary_monitor();
-    let monitor_size = monitor.size();
     let window_builder = WindowBuilder::new()
         .with_title("Learn OpenGL")
         .with_fullscreen(Some(Fullscreen::Borderless(monitor)));
@@ -36,26 +35,15 @@ fn main() {
         .build_windowed(window_builder, &event_loop)
         .unwrap();
     let context = unsafe { context.make_current().unwrap() };
-    gl::load_with(|s| context.get_proc_address(s));
-
-    let (width, height) = (1920, 1080);
-    let mut x_offset = (monitor_size.width as i32 / 2) - (width / 2);
-    if x_offset < 0 {
-        x_offset = 0;
-    }
-    let mut y_offset = (monitor_size.height as i32 / 2) - (height / 2);
-    if y_offset < 0 {
-        y_offset = 0;
-    }
-    unsafe {
-        gl::Viewport(x_offset, y_offset, width, height);
-        gl::ClearColor(0.0, 0.0, 0.0, 1.0);
-        gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-        gl::Enable(gl::DEPTH_TEST);
-    }
-    let start = Instant::now();
     context.window().set_cursor_grab(true).unwrap();
     context.window().set_cursor_visible(false);
+
+    gl::load_with(|s| context.get_proc_address(s));
+    unsafe {
+        gl::Enable(gl::DEPTH_TEST);
+        gl::ClearColor(0.0, 0.0, 0.0, 1.0);
+        gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+    }
 
     let vertices: [GLfloat; 36 * 5] = [
         -0.5, -0.5, -0.5, 0.0, 0.0, 0.5, -0.5, -0.5, 1.0, 0.0, 0.5, 0.5, -0.5, 1.0, 1.0, 0.5, 0.5,
@@ -158,10 +146,6 @@ fn main() {
         shader_program.use_program();
         shader_program.set_uniform_int("textureSampler", 0);
         shader_program.set_uniform_int("textureSampler2", 1);
-        gl::ActiveTexture(gl::TEXTURE0);
-        gl::BindTexture(gl::TEXTURE_2D, textures[0]);
-        gl::ActiveTexture(gl::TEXTURE1);
-        gl::BindTexture(gl::TEXTURE_2D, textures[1]);
     }
 
     let cube_positions = [
@@ -177,99 +161,97 @@ fn main() {
         glm::vec3(-1.3, 1.0, -1.5),
     ];
 
-    let mut last_frame = Instant::now();
+    let start_time = Instant::now();
+    let mut prev_frame_time = start_time;
     let mut delta_time = 0.0f32;
     let mut pressed_keys = Vec::with_capacity(10);
     let mut mouse_delta = (0.0, 0.0);
     let mut scroll_delta = 0.0;
-
     let mut camera = Camera::new(
         glm::vec3(0.0, 0.0, 3.0),
         glm::vec3(0.0, 1.0, 0.0),
         -90.0,
         0.0,
     );
+    let mut window_is_focused = true;
+    let mut aspect_ratio = 16.0 / 9.0;
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
         match event {
-            Event::WindowEvent {
-                event: WindowEvent::CloseRequested,
-                ..
-            } => *control_flow = ControlFlow::Exit,
-            Event::WindowEvent {
-                event: WindowEvent::KeyboardInput { input, .. },
-                ..
-            } => match input.state {
-                ElementState::Pressed => match input.virtual_keycode {
-                    Some(VirtualKeyCode::Escape) => *control_flow = ControlFlow::Exit,
-                    Some(key) => {
-                        if !pressed_keys.contains(&key) {
-                            pressed_keys.push(key)
-                        }
+            Event::WindowEvent { event, .. } => match event {
+                WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                WindowEvent::Resized(window_size) => {
+                    aspect_ratio = window_size.width as f64 / window_size.height as f64;
+                    unsafe {
+                        gl::Viewport(0, 0, window_size.width as i32, window_size.height as i32);
                     }
-                    _ => {}
-                },
-                ElementState::Released => match input.virtual_keycode {
-                    Some(key) => {
-                        if let Some(i) = pressed_keys.iter().position(|&k| k == key) {
-                            pressed_keys.swap_remove(i);
+                }
+                WindowEvent::KeyboardInput { input, .. } => match input.state {
+                    ElementState::Pressed => match input.virtual_keycode {
+                        Some(VirtualKeyCode::Escape) => *control_flow = ControlFlow::Exit,
+                        Some(key) => {
+                            if !pressed_keys.contains(&key) {
+                                pressed_keys.push(key)
+                            }
                         }
-                    }
-                    _ => {}
-                },
-            },
-            Event::DeviceEvent {
-                event: DeviceEvent::MouseMotion { delta: (dx, dy) },
-                ..
-            } => {
-                let (x, y) = mouse_delta;
-                mouse_delta = (x + dx as f32, y - dy as f32);
-            }
-            Event::DeviceEvent {
-                event:
-                    DeviceEvent::MouseWheel {
-                        delta: MouseScrollDelta::LineDelta(_, dy),
+                        _ => {}
                     },
-                ..
-            } => {
-                scroll_delta += dy / 15.0;
-            }
-            Event::WindowEvent {
-                event: WindowEvent::Resized(window_size),
-                ..
-            } => unsafe {
-                let mut x_offset = (window_size.width as i32 / 2) - (width / 2);
-                if x_offset < 0 {
-                    x_offset = 0;
+                    ElementState::Released => match input.virtual_keycode {
+                        Some(key) => {
+                            if let Some(i) = pressed_keys.iter().position(|&k| k == key) {
+                                pressed_keys.swap_remove(i);
+                            }
+                        }
+                        _ => {}
+                    },
+                },
+                WindowEvent::MouseWheel {
+                    delta: MouseScrollDelta::LineDelta(_, dy),
+                    ..
+                } => {
+                    scroll_delta -= dy;
                 }
-                let mut y_offset = (window_size.height as i32 / 2) - (height / 2);
-                if y_offset < 0 {
-                    y_offset = 0;
+                WindowEvent::Focused(is_focused) => window_is_focused = is_focused,
+                _ => {}
+            },
+            Event::DeviceEvent { event, .. } => match event {
+                DeviceEvent::MouseMotion {
+                    delta: (dx, dy), ..
+                } => {
+                    if !window_is_focused {
+                        return;
+                    }
+                    let (x, y) = mouse_delta;
+                    mouse_delta = (x + dx as f32, y - dy as f32);
                 }
-                gl::Viewport(x_offset, y_offset, width, height);
+                _ => {}
             },
             Event::MainEventsCleared => {
                 let now = Instant::now();
-                let time = (now - start).as_secs_f32();
-                delta_time = (now - last_frame).as_secs_f32();
-                last_frame = now;
+                let time = (now - start_time).as_secs_f32();
+                delta_time = (now - prev_frame_time).as_secs_f32();
+                prev_frame_time = now;
 
-                for key in pressed_keys.iter() {
-                    match key {
-                        VirtualKeyCode::W => camera.move_(CameraMotion::Forward, delta_time),
-                        VirtualKeyCode::S => camera.move_(CameraMotion::Backward, delta_time),
-                        VirtualKeyCode::A => camera.move_(CameraMotion::Left, delta_time),
-                        VirtualKeyCode::D => camera.move_(CameraMotion::Right, delta_time),
-                        _ => {}
-                    }
-                }
+                let camera_directions: Vec<_> = pressed_keys
+                    .iter()
+                    .filter_map(|key| match key {
+                        VirtualKeyCode::W => Some(CameraMotion::Forward),
+                        VirtualKeyCode::S => Some(CameraMotion::Backward),
+                        VirtualKeyCode::A => Some(CameraMotion::Left),
+                        VirtualKeyCode::D => Some(CameraMotion::Right),
+                        VirtualKeyCode::Space => Some(CameraMotion::Up),
+                        VirtualKeyCode::X => Some(CameraMotion::Down),
+                        _ => None,
+                    })
+                    .collect();
+                camera.move_(&camera_directions, delta_time);
                 camera.look(mouse_delta);
                 mouse_delta = (0.0, 0.0);
                 camera.zoom(scroll_delta);
                 scroll_delta = 0.0;
 
                 let projection =
-                    glm::perspective(16.0 / 9.0, camera.fov().to_radians(), 0.1, 100.0);
+                    glm::perspective(aspect_ratio as f32, camera.fov().to_radians(), 0.1, 100.0);
 
                 unsafe {
                     gl::ClearColor(0.2, 0.3, 0.3, 1.0);
@@ -306,7 +288,7 @@ fn main() {
 
                 context.swap_buffers().unwrap();
             }
-            _ => (),
+            _ => {}
         }
     });
 }
