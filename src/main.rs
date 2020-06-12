@@ -21,6 +21,8 @@ const VERTEX_SHADER: &str = include_str!("shaders/default.vert");
 const FRAGMENT_SHADER: &str = include_str!("shaders/default.frag");
 const LIGHT_SOURCE_FRAGMENT_SHADER: &str = include_str!("shaders/light-source.frag");
 
+const MULTISAMPLING_SAMPLES: u16 = 4;
+
 fn main() {
     let event_loop = EventLoop::new();
     let monitor = event_loop.primary_monitor();
@@ -32,6 +34,7 @@ fn main() {
         .with_gl(GlRequest::Specific(Api::OpenGl, (3, 3)))
         .with_gl_profile(GlProfile::Core)
         .with_vsync(true)
+        .with_multisampling(MULTISAMPLING_SAMPLES)
         .build_windowed(window_builder, &event_loop)
         .unwrap();
     let context = unsafe { context.make_current().unwrap() };
@@ -41,6 +44,7 @@ fn main() {
     gl::load_with(|s| context.get_proc_address(s));
     unsafe {
         gl::Enable(gl::DEPTH_TEST);
+        gl::Enable(gl::MULTISAMPLE);
     }
 
     let cube_vertices = [
