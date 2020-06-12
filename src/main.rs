@@ -134,15 +134,14 @@ fn main() {
     let default_shader = ShaderProgram::new(VERTEX_SHADER, FRAGMENT_SHADER).unwrap();
     let light_source_shader =
         ShaderProgram::new(VERTEX_SHADER, LIGHT_SOURCE_FRAGMENT_SHADER).unwrap();
-    let light_source_position = glm::vec3(1.2, 1.0, 2.0);
     unsafe {
         default_shader.use_program();
         default_shader.set_uniform_vec3f("objectColor", glm::vec3(1.0, 0.5, 0.31));
         default_shader.set_uniform_vec3f("lightColor", glm::vec3(1.0, 1.0, 1.0));
-        default_shader.set_uniform_vec3f("lightPos", light_source_position);
     }
 
-    let mut prev_frame_time = Instant::now();
+    let start_time = Instant::now();
+    let mut prev_frame_time = start_time;
     let mut delta_time = 0.0f32;
     let mut pressed_keys = Vec::with_capacity(10);
     let mut mouse_delta = (0.0, 0.0);
@@ -208,6 +207,7 @@ fn main() {
             },
             Event::MainEventsCleared => {
                 let now = Instant::now();
+                let total_delta_time = (now - start_time).as_secs_f32();
                 delta_time = (now - prev_frame_time).as_secs_f32();
                 prev_frame_time = now;
 
@@ -241,6 +241,13 @@ fn main() {
                         100.0,
                     );
 
+                    let r = 3.0;
+                    let light_source_position = glm::vec3(
+                        r * total_delta_time.sin(),
+                        r * total_delta_time.sin(),
+                        r * total_delta_time.cos(),
+                    );
+
                     light_source_shader.use_program();
                     gl::BindVertexArray(vaos[0]);
                     let mut model = glm::translate(&glm::Mat4::identity(), &light_source_position);
@@ -253,7 +260,7 @@ fn main() {
                     gl::DrawArrays(gl::TRIANGLES, 0, 36);
 
                     default_shader.use_program();
-                    default_shader.set_uniform_vec3f("viewPos", camera.position());
+                    default_shader.set_uniform_vec3f("aLightPos", light_source_position);
                     gl::BindVertexArray(vaos[1]);
                     let model = glm::Mat4::identity();
                     for &(name, val) in
