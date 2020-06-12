@@ -131,19 +131,24 @@ fn main() {
         gl::EnableVertexAttribArray(1);
     }
 
-    let default_shader = ShaderProgram::new(VERTEX_SHADER, FRAGMENT_SHADER).unwrap();
+    let light_source_position = glm::vec3(1.2, 1.0, 2.0);
     let light_source_shader =
         ShaderProgram::new(VERTEX_SHADER, LIGHT_SOURCE_FRAGMENT_SHADER).unwrap();
-    let light_source_position = glm::vec3(1.2, 1.0, 2.0);
+
+    let default_shader = ShaderProgram::new(VERTEX_SHADER, FRAGMENT_SHADER).unwrap();
     unsafe {
         default_shader.use_program();
-        default_shader.set_uniform_vec3f("objectColor", glm::vec3(1.0, 0.5, 0.31));
-        default_shader.set_uniform_vec3f("lightColor", glm::vec3(1.0, 1.0, 1.0));
-        default_shader.set_uniform_vec3f("lightPos", light_source_position);
+        default_shader.set_uniform_vec3f("light.position", light_source_position);
+        default_shader.set_uniform_vec3f("light.specular", glm::vec3(1.0, 1.0, 1.0));
+        default_shader.set_uniform_vec3f("material.ambient", glm::vec3(1.0, 0.5, 0.31));
+        default_shader.set_uniform_vec3f("material.diffuse", glm::vec3(1.0, 0.5, 0.31));
+        default_shader.set_uniform_vec3f("material.specular", glm::vec3(0.5, 0.5, 0.5));
+        default_shader.set_uniform_float("material.shininess", 32.0);
     }
 
     let mut prev_frame_time = Instant::now();
     let mut delta_time = 0.0f32;
+    let mut time = delta_time;
     let mut pressed_keys = Vec::with_capacity(10);
     let mut mouse_delta = (0.0, 0.0);
     let mut scroll_delta = 0.0;
@@ -209,6 +214,7 @@ fn main() {
             Event::MainEventsCleared => {
                 let now = Instant::now();
                 delta_time = (now - prev_frame_time).as_secs_f32();
+                time += delta_time;
                 prev_frame_time = now;
 
                 let camera_directions: Vec<_> = pressed_keys
@@ -253,6 +259,12 @@ fn main() {
                     gl::DrawArrays(gl::TRIANGLES, 0, 36);
 
                     default_shader.use_program();
+                    let light_color =
+                        glm::vec3((2.0 * time).sin(), (0.7 * time).sin(), (1.3 * time).sin());
+                    let diffuse_color = light_color * 0.5;
+                    let ambient_color = diffuse_color * 0.2;
+                    default_shader.set_uniform_vec3f("light.ambient", ambient_color);
+                    default_shader.set_uniform_vec3f("light.diffuse", diffuse_color);
                     default_shader.set_uniform_vec3f("viewPos", camera.position());
                     gl::BindVertexArray(vaos[1]);
                     let model = glm::Mat4::identity();
