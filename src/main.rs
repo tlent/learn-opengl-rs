@@ -246,8 +246,11 @@ fn main() {
                         0.1,
                         100.0,
                     );
+                    let light_color =
+                        glm::vec3((2.0 * time).sin(), (0.7 * time).sin(), (1.3 * time).sin());
 
                     light_source_shader.use_program();
+                    light_source_shader.set_uniform_vec3f("color", light_color);
                     gl::BindVertexArray(vaos[0]);
                     let mut model = glm::translate(&glm::Mat4::identity(), &light_source_position);
                     model = glm::scale(&model, &glm::vec3(0.2, 0.2, 0.2));
@@ -259,8 +262,6 @@ fn main() {
                     gl::DrawArrays(gl::TRIANGLES, 0, 36);
 
                     default_shader.use_program();
-                    let light_color =
-                        glm::vec3((2.0 * time).sin(), (0.7 * time).sin(), (1.3 * time).sin());
                     let diffuse_color = light_color * 0.5;
                     let ambient_color = diffuse_color * 0.2;
                     default_shader.set_uniform_vec3f("light.ambient", ambient_color);
