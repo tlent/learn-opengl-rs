@@ -89,6 +89,10 @@ impl Camera {
     pub fn fov(&self) -> f32 {
         self.fov
     }
+
+    pub fn position(&self) -> glm::Vec3 {
+        self.position
+    }
 }
 
 pub enum CameraMotion {

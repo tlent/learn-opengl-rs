@@ -48,42 +48,42 @@ fn main() {
     }
 
     let cube_vertices = [
-        Vertex::new(glm::vec3(-0.5, -0.5, -0.5)),
-        Vertex::new(glm::vec3(0.5, -0.5, -0.5)),
-        Vertex::new(glm::vec3(0.5, 0.5, -0.5)),
-        Vertex::new(glm::vec3(0.5, 0.5, -0.5)),
-        Vertex::new(glm::vec3(-0.5, 0.5, -0.5)),
-        Vertex::new(glm::vec3(-0.5, -0.5, -0.5)),
-        Vertex::new(glm::vec3(-0.5, -0.5, 0.5)),
-        Vertex::new(glm::vec3(0.5, -0.5, 0.5)),
-        Vertex::new(glm::vec3(0.5, 0.5, 0.5)),
-        Vertex::new(glm::vec3(0.5, 0.5, 0.5)),
-        Vertex::new(glm::vec3(-0.5, 0.5, 0.5)),
-        Vertex::new(glm::vec3(-0.5, -0.5, 0.5)),
-        Vertex::new(glm::vec3(-0.5, 0.5, 0.5)),
-        Vertex::new(glm::vec3(-0.5, 0.5, -0.5)),
-        Vertex::new(glm::vec3(-0.5, -0.5, -0.5)),
-        Vertex::new(glm::vec3(-0.5, -0.5, -0.5)),
-        Vertex::new(glm::vec3(-0.5, -0.5, 0.5)),
-        Vertex::new(glm::vec3(-0.5, 0.5, 0.5)),
-        Vertex::new(glm::vec3(0.5, 0.5, 0.5)),
-        Vertex::new(glm::vec3(0.5, 0.5, -0.5)),
-        Vertex::new(glm::vec3(0.5, -0.5, -0.5)),
-        Vertex::new(glm::vec3(0.5, -0.5, -0.5)),
-        Vertex::new(glm::vec3(0.5, -0.5, 0.5)),
-        Vertex::new(glm::vec3(0.5, 0.5, 0.5)),
-        Vertex::new(glm::vec3(-0.5, -0.5, -0.5)),
-        Vertex::new(glm::vec3(0.5, -0.5, -0.5)),
-        Vertex::new(glm::vec3(0.5, -0.5, 0.5)),
-        Vertex::new(glm::vec3(0.5, -0.5, 0.5)),
-        Vertex::new(glm::vec3(-0.5, -0.5, 0.5)),
-        Vertex::new(glm::vec3(-0.5, -0.5, -0.5)),
-        Vertex::new(glm::vec3(-0.5, 0.5, -0.5)),
-        Vertex::new(glm::vec3(0.5, 0.5, -0.5)),
-        Vertex::new(glm::vec3(0.5, 0.5, 0.5)),
-        Vertex::new(glm::vec3(0.5, 0.5, 0.5)),
-        Vertex::new(glm::vec3(-0.5, 0.5, 0.5)),
-        Vertex::new(glm::vec3(-0.5, 0.5, -0.5)),
+        Vertex::new(glm::vec3(-0.5, -0.5, -0.5), glm::vec3(0.0, 0.0, -1.0)),
+        Vertex::new(glm::vec3(0.5, -0.5, -0.5), glm::vec3(0.0, 0.0, -1.0)),
+        Vertex::new(glm::vec3(0.5, 0.5, -0.5), glm::vec3(0.0, 0.0, -1.0)),
+        Vertex::new(glm::vec3(0.5, 0.5, -0.5), glm::vec3(0.0, 0.0, -1.0)),
+        Vertex::new(glm::vec3(-0.5, 0.5, -0.5), glm::vec3(0.0, 0.0, -1.0)),
+        Vertex::new(glm::vec3(-0.5, -0.5, -0.5), glm::vec3(0.0, 0.0, -1.0)),
+        Vertex::new(glm::vec3(-0.5, -0.5, 0.5), glm::vec3(0.0, 0.0, 1.0)),
+        Vertex::new(glm::vec3(0.5, -0.5, 0.5), glm::vec3(0.0, 0.0, 1.0)),
+        Vertex::new(glm::vec3(0.5, 0.5, 0.5), glm::vec3(0.0, 0.0, 1.0)),
+        Vertex::new(glm::vec3(0.5, 0.5, 0.5), glm::vec3(0.0, 0.0, 1.0)),
+        Vertex::new(glm::vec3(-0.5, 0.5, 0.5), glm::vec3(0.0, 0.0, 1.0)),
+        Vertex::new(glm::vec3(-0.5, -0.5, 0.5), glm::vec3(0.0, 0.0, 1.0)),
+        Vertex::new(glm::vec3(-0.5, 0.5, 0.5), glm::vec3(-1.0, 0.0, 0.0)),
+        Vertex::new(glm::vec3(-0.5, 0.5, -0.5), glm::vec3(-1.0, 0.0, 0.0)),
+        Vertex::new(glm::vec3(-0.5, -0.5, -0.5), glm::vec3(-1.0, 0.0, 0.0)),
+        Vertex::new(glm::vec3(-0.5, -0.5, -0.5), glm::vec3(-1.0, 0.0, 0.0)),
+        Vertex::new(glm::vec3(-0.5, -0.5, 0.5), glm::vec3(-1.0, 0.0, 0.0)),
+        Vertex::new(glm::vec3(-0.5, 0.5, 0.5), glm::vec3(-1.0, 0.0, 0.0)),
+        Vertex::new(glm::vec3(0.5, 0.5, 0.5), glm::vec3(1.0, 0.0, 0.0)),
+        Vertex::new(glm::vec3(0.5, 0.5, -0.5), glm::vec3(1.0, 0.0, 0.0)),
+        Vertex::new(glm::vec3(0.5, -0.5, -0.5), glm::vec3(1.0, 0.0, 0.0)),
+        Vertex::new(glm::vec3(0.5, -0.5, -0.5), glm::vec3(1.0, 0.0, 0.0)),
+        Vertex::new(glm::vec3(0.5, -0.5, 0.5), glm::vec3(1.0, 0.0, 0.0)),
+        Vertex::new(glm::vec3(0.5, 0.5, 0.5), glm::vec3(1.0, 0.0, 0.0)),
+        Vertex::new(glm::vec3(-0.5, -0.5, -0.5), glm::vec3(0.0, -1.0, 0.0)),
+        Vertex::new(glm::vec3(0.5, -0.5, -0.5), glm::vec3(0.0, -1.0, 0.0)),
+        Vertex::new(glm::vec3(0.5, -0.5, 0.5), glm::vec3(0.0, -1.0, 0.0)),
+        Vertex::new(glm::vec3(0.5, -0.5, 0.5), glm::vec3(0.0, -1.0, 0.0)),
+        Vertex::new(glm::vec3(-0.5, -0.5, 0.5), glm::vec3(0.0, -1.0, 0.0)),
+        Vertex::new(glm::vec3(-0.5, -0.5, -0.5), glm::vec3(0.0, -1.0, 0.0)),
+        Vertex::new(glm::vec3(-0.5, 0.5, -0.5), glm::vec3(0.0, 1.0, 0.0)),
+        Vertex::new(glm::vec3(0.5, 0.5, -0.5), glm::vec3(0.0, 1.0, 0.0)),
+        Vertex::new(glm::vec3(0.5, 0.5, 0.5), glm::vec3(0.0, 1.0, 0.0)),
+        Vertex::new(glm::vec3(0.5, 0.5, 0.5), glm::vec3(0.0, 1.0, 0.0)),
+        Vertex::new(glm::vec3(-0.5, 0.5, 0.5), glm::vec3(0.0, 1.0, 0.0)),
+        Vertex::new(glm::vec3(-0.5, 0.5, -0.5), glm::vec3(0.0, 1.0, 0.0)),
     ];
 
     let mut vaos = [0; 2];
@@ -120,17 +120,27 @@ fn main() {
             ptr::null(),
         );
         gl::EnableVertexAttribArray(0);
+        gl::VertexAttribPointer(
+            1,
+            3,
+            gl::FLOAT,
+            gl::FALSE,
+            mem::size_of::<Vertex>() as i32,
+            (3 * mem::size_of::<f32>()) as *const c_void,
+        );
+        gl::EnableVertexAttribArray(1);
     }
 
     let default_shader = ShaderProgram::new(VERTEX_SHADER, FRAGMENT_SHADER).unwrap();
+    let light_source_shader =
+        ShaderProgram::new(VERTEX_SHADER, LIGHT_SOURCE_FRAGMENT_SHADER).unwrap();
+    let light_source_position = glm::vec3(1.2, 1.0, 2.0);
     unsafe {
         default_shader.use_program();
         default_shader.set_uniform_vec3f("objectColor", glm::vec3(1.0, 0.5, 0.31));
         default_shader.set_uniform_vec3f("lightColor", glm::vec3(1.0, 1.0, 1.0));
+        default_shader.set_uniform_vec3f("lightPos", light_source_position);
     }
-    let light_source_shader =
-        ShaderProgram::new(VERTEX_SHADER, LIGHT_SOURCE_FRAGMENT_SHADER).unwrap();
-    let light_source_position = glm::vec3(1.2, 1.0, 2.0);
 
     let mut prev_frame_time = Instant::now();
     let mut delta_time = 0.0f32;
@@ -243,6 +253,7 @@ fn main() {
                     gl::DrawArrays(gl::TRIANGLES, 0, 36);
 
                     default_shader.use_program();
+                    default_shader.set_uniform_vec3f("viewPos", camera.position());
                     gl::BindVertexArray(vaos[1]);
                     let model = glm::Mat4::identity();
                     for &(name, val) in
@@ -268,10 +279,11 @@ fn main() {
 #[repr(C)]
 struct Vertex {
     position: glm::Vec3,
+    normal: glm::Vec3,
 }
 
 impl Vertex {
-    fn new(position: glm::Vec3) -> Self {
-        Self { position }
+    fn new(position: glm::Vec3, normal: glm::Vec3) -> Self {
+        Self { position, normal }
     }
 }
