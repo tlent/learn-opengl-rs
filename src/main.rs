@@ -347,7 +347,6 @@ fn main() {
         default_shader.set_uniform_vec3f("light.specular", light_color);
         default_shader.set_uniform_int("material.diffuse", 0);
         default_shader.set_uniform_int("material.specular", 1);
-        default_shader.set_uniform_int("emission", 2);
         default_shader.set_uniform_float("material.shininess", 32.0);
     }
 
