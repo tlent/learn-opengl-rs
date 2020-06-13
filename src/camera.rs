@@ -93,6 +93,10 @@ impl Camera {
     pub fn position(&self) -> glm::Vec3 {
         self.position
     }
+
+    pub fn front(&self) -> glm::Vec3 {
+        self.front
+    }
 }
 
 pub enum CameraMotion {
