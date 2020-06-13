@@ -244,6 +244,13 @@ fn main() {
         glm::vec3(-1.3, 1.0, -1.5),
     ];
 
+    let point_light_positions = [
+        glm::vec3(0.7, 0.2, 2.0),
+        glm::vec3(2.3, -3.3, -4.0),
+        glm::vec3(-4.0, 2.0, -12.0),
+        glm::vec3(0.0, 0.0, -3.0),
+    ];
+
     let mut vaos = [0; 2];
     let mut vbos = [0; 1];
     unsafe {
@@ -337,28 +344,40 @@ fn main() {
         gl::GenerateMipmap(gl::TEXTURE_2D);
     }
 
-    // let light_source_position = glm::vec3(1.2, 1.0, 2.0);
     let light_color = glm::vec3(1.0, 1.0, 1.0);
     let light_source_shader =
         ShaderProgram::new(VERTEX_SHADER, LIGHT_SOURCE_FRAGMENT_SHADER).unwrap();
-    unsafe {
-        light_source_shader.use_program();
-        // light_source_shader.set_uniform_vec3f("color", light_color);
-        // let mut model = glm::translate(&glm::Mat4::identity(), &light_source_position);
-        // model = glm::scale(&model, &glm::vec3(0.2, 0.2, 0.2));
-        // light_source_shader.set_uniform_mat4f("model", model);
-    }
 
     let default_shader = ShaderProgram::new(VERTEX_SHADER, FRAGMENT_SHADER).unwrap();
     let diffuse_color = light_color * 0.5;
     let ambient_color = diffuse_color * 0.2;
     unsafe {
         default_shader.use_program();
-        default_shader.set_uniform_float("light.innerCutoff", 12.5f32.to_radians().cos());
-        default_shader.set_uniform_float("light.outerCutoff", 17.5f32.to_radians().cos());
-        default_shader.set_uniform_vec3f("light.ambient", ambient_color);
-        default_shader.set_uniform_vec3f("light.diffuse", diffuse_color);
-        default_shader.set_uniform_vec3f("light.specular", light_color);
+        default_shader.set_uniform_vec3f("directionalLight.direction", glm::vec3(-0.2, -1.0, -0.3));
+        default_shader.set_uniform_vec3f("directionalLight.ambient", ambient_color);
+        default_shader.set_uniform_vec3f("directionalLight.diffuse", diffuse_color);
+        default_shader.set_uniform_vec3f("directionalLight.specular", light_color);
+
+        for (i, &pos) in point_light_positions.iter().enumerate() {
+            let light = format!("pointLights[{}]", i);
+            default_shader.set_uniform_vec3f(&format!("{}.position", light), pos);
+            default_shader.set_uniform_float(&format!("{}.constant", light), 1.0);
+            default_shader.set_uniform_float(&format!("{}.linear", light), 0.09);
+            default_shader.set_uniform_float(&format!("{}.quadratic", light), 0.032);
+            default_shader.set_uniform_vec3f(&format!("{}.ambient", light), ambient_color);
+            default_shader.set_uniform_vec3f(&format!("{}.diffuse", light), diffuse_color);
+            default_shader.set_uniform_vec3f(&format!("{}.specular", light), light_color);
+        }
+
+        default_shader.set_uniform_float("spotLight.innerCutoff", 12.5f32.to_radians().cos());
+        default_shader.set_uniform_float("spotLight.outerCutoff", 17.5f32.to_radians().cos());
+        default_shader.set_uniform_float("spotLight.linear", 0.09);
+        default_shader.set_uniform_float("spotLight.quadratic", 0.032);
+        default_shader.set_uniform_vec3f("spotLight.ambient", ambient_color);
+        default_shader.set_uniform_vec3f("spotLight.ambient", ambient_color);
+        default_shader.set_uniform_vec3f("spotLight.diffuse", diffuse_color);
+        default_shader.set_uniform_vec3f("spotLight.specular", light_color);
+
         default_shader.set_uniform_int("material.diffuse", 0);
         default_shader.set_uniform_int("material.specular", 1);
         default_shader.set_uniform_float("material.shininess", 32.0);
@@ -465,19 +484,25 @@ fn main() {
                         100.0,
                     );
 
-                    // light_source_shader.use_program();
-                    // for &(name, val) in &[("view", view), ("projection", projection)] {
-                    //     light_source_shader.set_uniform_mat4f(name, val);
-                    // }
-                    // gl::BindVertexArray(vaos[0]);
-                    // gl::DrawArrays(gl::TRIANGLES, 0, 36);
+                    light_source_shader.use_program();
+                    for &(name, val) in &[("view", view), ("projection", projection)] {
+                        light_source_shader.set_uniform_mat4f(name, val);
+                    }
+                    gl::BindVertexArray(vaos[0]);
+                    for &pos in point_light_positions.iter() {
+                        let mut model = glm::translate(&glm::Mat4::identity(), &pos);
+                        model = glm::scale(&model, &glm::vec3(0.2, 0.2, 0.2));
+                        light_source_shader.set_uniform_mat4f("model", model);
+                        light_source_shader.set_uniform_vec3f("color", light_color);
+                        gl::DrawArrays(gl::TRIANGLES, 0, 36);
+                    }
 
                     default_shader.use_program();
                     default_shader.set_uniform_vec3f("viewPos", camera.position());
                     default_shader.set_uniform_mat4f("view", view);
                     default_shader.set_uniform_mat4f("projection", projection);
-                    default_shader.set_uniform_vec3f("light.position", camera.position());
-                    default_shader.set_uniform_vec3f("light.direction", camera.front());
+                    default_shader.set_uniform_vec3f("spotLight.position", camera.position());
+                    default_shader.set_uniform_vec3f("spotLight.direction", camera.front());
                     gl::BindVertexArray(vaos[1]);
                     for (i, pos) in cube_positions.iter().enumerate() {
                         let mut model = glm::translate(&glm::Mat4::identity(), pos);
