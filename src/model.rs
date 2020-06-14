@@ -5,13 +5,11 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use anyhow::Result;
-use image::GenericImageView;
 use memoffset::offset_of;
 use nalgebra_glm as glm;
 
-use std::time::{Duration, Instant};
-
 use crate::shader_program::ShaderProgram;
+use crate::texture::Texture;
 
 pub struct Model {
     meshes: Vec<Mesh>,
@@ -59,30 +57,32 @@ impl Model {
                     })
                     .collect();
                 let indices = mesh.indices;
-                let textures = match mesh.material_id {
-                    Some(i) => {
-                        let material = &materials[i];
-                        let base_path = path.as_ref().parent().unwrap_or("/".as_ref());
-                        let mut textures = vec![];
-                        if !material.diffuse_texture.is_empty() {
-                            let mut path = PathBuf::from(&material.diffuse_texture);
-                            if path.is_relative() {
-                                path = base_path.join(path);
-                            }
-                            textures.push(texture_loader.load(path, TextureType::Diffuse)?);
-                        };
-                        if !material.specular_texture.is_empty() {
-                            let mut path = PathBuf::from(&material.specular_texture);
-                            if path.is_relative() {
-                                path = base_path.join(path);
-                            }
-                            textures.push(texture_loader.load(path, TextureType::Specular)?);
-                        };
-                        textures
-                    }
-                    None => vec![],
-                };
-                Ok(Mesh::new(vertices, indices, textures))
+                let mut diffuse_textures = vec![];
+                let mut specular_textures = vec![];
+                if let Some(id) = mesh.material_id {
+                    let material = &materials[id];
+                    let base_path = path.as_ref().parent().unwrap_or("/".as_ref());
+                    if !material.diffuse_texture.is_empty() {
+                        let mut path = PathBuf::from(&material.diffuse_texture);
+                        if path.is_relative() {
+                            path = base_path.join(path);
+                        }
+                        diffuse_textures.push(texture_loader.load(path)?);
+                    };
+                    if !material.specular_texture.is_empty() {
+                        let mut path = PathBuf::from(&material.specular_texture);
+                        if path.is_relative() {
+                            path = base_path.join(path);
+                        }
+                        specular_textures.push(texture_loader.load(path)?);
+                    };
+                }
+                Ok(Mesh::new(
+                    vertices,
+                    indices,
+                    diffuse_textures,
+                    specular_textures,
+                ))
             })
             .collect::<Result<_>>()?;
         Ok(Self { meshes })
@@ -99,14 +99,20 @@ impl Model {
 struct Mesh {
     vertices: Vec<Vertex>,
     indices: Vec<u32>,
-    textures: Vec<Rc<Texture>>,
+    diffuse_textures: Vec<Rc<Texture>>,
+    specular_textures: Vec<Rc<Texture>>,
     vao: u32,
     vbo: u32,
     ebo: u32,
 }
 
 impl Mesh {
-    unsafe fn new(vertices: Vec<Vertex>, indices: Vec<u32>, textures: Vec<Rc<Texture>>) -> Self {
+    unsafe fn new(
+        vertices: Vec<Vertex>,
+        indices: Vec<u32>,
+        diffuse_textures: Vec<Rc<Texture>>,
+        specular_textures: Vec<Rc<Texture>>,
+    ) -> Self {
         let mut vao = 0;
         let mut vbo = 0;
         let mut ebo = 0;
@@ -162,7 +168,8 @@ impl Mesh {
         Self {
             vertices,
             indices,
-            textures,
+            diffuse_textures,
+            specular_textures,
             vao,
             vbo,
             ebo,
@@ -170,30 +177,22 @@ impl Mesh {
     }
 
     unsafe fn draw(&self, shader: &ShaderProgram) {
-        let diffuse_textures = self
-            .textures
-            .iter()
-            .enumerate()
-            .filter(|(_, t)| t.type_ == TextureType::Diffuse)
-            .enumerate();
-        for (diffuse_num, (texture_num, texture)) in diffuse_textures {
+        let mut texture_num = 0;
+        let diffuse_textures = self.diffuse_textures.iter().enumerate();
+        for (diffuse_num, texture) in diffuse_textures {
             let name = &format!("material.texture_diffuse[{}]", diffuse_num);
             shader.set_uniform_int(name, texture_num as i32);
             gl::ActiveTexture(gl::TEXTURE0 + texture_num as u32);
-            gl::BindTexture(gl::TEXTURE_2D, texture.id);
+            gl::BindTexture(gl::TEXTURE_2D, texture.id());
+            texture_num += 1;
         }
-
-        let specular_textures = self
-            .textures
-            .iter()
-            .enumerate()
-            .filter(|(_, t)| t.type_ == TextureType::Specular)
-            .enumerate();
-        for (specular_num, (texture_num, texture)) in specular_textures {
+        let specular_textures = self.specular_textures.iter().enumerate();
+        for (specular_num, texture) in specular_textures {
             let name = &format!("material.texture_specular[{}]", specular_num);
             shader.set_uniform_int(name, texture_num as i32);
             gl::ActiveTexture(gl::TEXTURE0 + texture_num as u32);
-            gl::BindTexture(gl::TEXTURE_2D, texture.id);
+            gl::BindTexture(gl::TEXTURE_2D, texture.id());
+            texture_num += 1;
         }
         gl::ActiveTexture(gl::TEXTURE0);
 
@@ -234,7 +233,7 @@ impl TextureLoader {
         Self { cache: vec![] }
     }
 
-    unsafe fn load<P>(&mut self, path: P, type_: TextureType) -> Result<Rc<Texture>>
+    unsafe fn load<P>(&mut self, path: P) -> Result<Rc<Texture>>
     where
         P: Into<PathBuf>,
     {
@@ -242,68 +241,10 @@ impl TextureLoader {
         match self.cache.iter().find(|(p, _)| *p == path) {
             Some((_, texture)) => Ok(Rc::clone(&texture)),
             None => {
-                let texture = Rc::new(Texture::load(&path, type_)?);
+                let texture = Rc::new(Texture::load(&path)?);
                 self.cache.push((path, Rc::clone(&texture)));
                 Ok(texture)
             }
         }
     }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-struct Texture {
-    id: u32,
-    type_: TextureType,
-}
-
-impl Texture {
-    unsafe fn load<P>(path: P, type_: TextureType) -> Result<Self>
-    where
-        P: AsRef<Path>,
-    {
-        let image = image::open(path)?;
-        let (width, height) = image.dimensions();
-        let raw = image.into_rgba().into_raw();
-
-        let mut id = 0;
-        gl::GenTextures(1, &mut id);
-        gl::BindTexture(gl::TEXTURE_2D, id);
-        gl::TexImage2D(
-            gl::TEXTURE_2D,
-            0,
-            gl::RGB8 as i32,
-            width as i32,
-            height as i32,
-            0,
-            gl::RGBA,
-            gl::UNSIGNED_BYTE,
-            raw.as_ptr() as *const c_void,
-        );
-        gl::GenerateMipmap(gl::TEXTURE_2D);
-
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as i32);
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as i32);
-        gl::TexParameteri(
-            gl::TEXTURE_2D,
-            gl::TEXTURE_MIN_FILTER,
-            gl::LINEAR_MIPMAP_LINEAR as i32,
-        );
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
-
-        Ok(Self { id, type_ })
-    }
-}
-
-impl Drop for Texture {
-    fn drop(&mut self) {
-        unsafe {
-            gl::DeleteTextures(1, &self.id);
-        }
-    }
-}
-
-#[derive(PartialEq, Eq, Debug)]
-enum TextureType {
-    Diffuse,
-    Specular,
 }

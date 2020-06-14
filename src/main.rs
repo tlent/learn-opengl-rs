@@ -1,6 +1,7 @@
 mod camera;
 mod model;
 mod shader_program;
+mod texture;
 
 use std::time::Instant;
 
