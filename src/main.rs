@@ -14,12 +14,10 @@ use winit::{
 };
 
 use camera::{Camera, CameraMotion};
-use model::Model;
 use shader_program::ShaderProgram;
 
-const VERTEX_SHADER: &str = include_str!("shaders/lighting.vert");
-const FRAGMENT_SHADER: &str = include_str!("shaders/lighting.frag");
-const LIGHT_SOURCE_FRAGMENT_SHADER: &str = include_str!("shaders/light-source.frag");
+const VERTEX_SHADER: &str = include_str!("shaders/basic.vert");
+const FRAGMENT_SHADER: &str = include_str!("shaders/basic.frag");
 
 const MULTISAMPLING_SAMPLES: u16 = 4;
 
@@ -50,45 +48,7 @@ fn main() {
         context.swap_buffers().unwrap();
     }
 
-    let light_color = glm::vec3(1.0, 1.0, 1.0);
-    let point_light_position = glm::vec3(2.0, 2.0, 2.0);
-    let light_source_shader =
-        ShaderProgram::new(VERTEX_SHADER, LIGHT_SOURCE_FRAGMENT_SHADER).unwrap();
-
-    let default_shader = ShaderProgram::new(VERTEX_SHADER, FRAGMENT_SHADER).unwrap();
-    let diffuse_color = light_color * 0.5;
-    let ambient_color = diffuse_color * 0.2;
-    unsafe {
-        default_shader.use_program();
-        default_shader.set_uniform_mat4f("model", glm::Mat4::identity());
-
-        default_shader.set_uniform_vec3f("directionalLight.direction", glm::vec3(-0.2, -1.0, -0.3));
-        default_shader.set_uniform_vec3f("directionalLight.ambient", ambient_color);
-        default_shader.set_uniform_vec3f("directionalLight.diffuse", diffuse_color);
-        default_shader.set_uniform_vec3f("directionalLight.specular", light_color);
-
-        default_shader.set_uniform_vec3f("pointLight.position", point_light_position);
-        default_shader.set_uniform_float("pointLight.constant", 1.0);
-        default_shader.set_uniform_float("pointLight.linear", 0.09);
-        default_shader.set_uniform_float("pointLight.quadratic", 0.032);
-        default_shader.set_uniform_vec3f("pointLight.ambient", ambient_color);
-        default_shader.set_uniform_vec3f("pointLight.diffuse", diffuse_color);
-        default_shader.set_uniform_vec3f("pointLight.specular", light_color);
-
-        // default_shader.set_uniform_float("spotLight.innerCutoff", 12.5f32.to_radians().cos());
-        // default_shader.set_uniform_float("spotLight.outerCutoff", 17.5f32.to_radians().cos());
-        // default_shader.set_uniform_float("spotLight.linear", 0.09);
-        // default_shader.set_uniform_float("spotLight.quadratic", 0.032);
-        // default_shader.set_uniform_vec3f("spotLight.ambient", ambient_color);
-        // default_shader.set_uniform_vec3f("spotLight.ambient", ambient_color);
-        // default_shader.set_uniform_vec3f("spotLight.diffuse", diffuse_color);
-        // default_shader.set_uniform_vec3f("spotLight.specular", light_color);
-
-        default_shader.set_uniform_float("material.shininess", 32.0);
-    }
-
-    let cube = unsafe { Model::load("models/cube/cube.obj").unwrap() };
-    let backpack = unsafe { Model::load("models/backpack/backpack.obj").unwrap() };
+    let basic_shader = ShaderProgram::new(VERTEX_SHADER, FRAGMENT_SHADER).unwrap();
 
     let mut prev_frame_time = Instant::now();
     let mut delta_time = 0.0f32;
@@ -190,24 +150,6 @@ fn main() {
                         0.1,
                         100.0,
                     );
-
-                    light_source_shader.use_program();
-                    light_source_shader.set_uniform_mat4f("view", view);
-                    light_source_shader.set_uniform_mat4f("projection", projection);
-                    let mut model = glm::translate(&glm::Mat4::identity(), &point_light_position);
-                    model = glm::scale(&model, &glm::vec3(0.2, 0.2, 0.2));
-                    light_source_shader.set_uniform_mat4f("model", model);
-                    light_source_shader.set_uniform_vec3f("color", light_color);
-                    cube.draw(&light_source_shader);
-
-                    default_shader.use_program();
-                    default_shader.set_uniform_vec3f("viewPos", camera.position());
-                    default_shader.set_uniform_mat4f("view", view);
-                    default_shader.set_uniform_mat4f("projection", projection);
-                    // default_shader.set_uniform_vec3f("spotLight.position", camera.position());
-                    // default_shader.set_uniform_vec3f("spotLight.direction", camera.front());
-
-                    backpack.draw(&default_shader);
                 }
 
                 context.swap_buffers().unwrap();
