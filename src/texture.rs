@@ -43,6 +43,8 @@ impl Texture {
         );
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
 
+        gl::BindTexture(gl::TEXTURE_2D, 0);
+
         Ok(Self { id })
     }
 

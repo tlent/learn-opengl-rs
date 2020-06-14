@@ -3,9 +3,12 @@ mod model;
 mod shader_program;
 mod texture;
 
+use std::ffi::c_void;
+use std::mem;
 use std::time::Instant;
 
 use glutin::{Api, ContextBuilder, GlProfile, GlRequest};
+use memoffset::offset_of;
 use nalgebra_glm as glm;
 use winit::{
     event::{DeviceEvent, ElementState, Event, MouseScrollDelta, VirtualKeyCode, WindowEvent},
@@ -15,6 +18,7 @@ use winit::{
 
 use camera::{Camera, CameraMotion};
 use shader_program::ShaderProgram;
+use texture::Texture;
 
 const VERTEX_SHADER: &str = include_str!("shaders/basic.vert");
 const FRAGMENT_SHADER: &str = include_str!("shaders/basic.frag");
@@ -48,7 +52,79 @@ fn main() {
         context.swap_buffers().unwrap();
     }
 
+    let cube_vertices = cube_vertices();
+    let plane_vertices = plane_vertices();
+
+    let mut vaos = [0; 2];
+    let mut vbos = [0; 2];
+    unsafe {
+        gl::GenVertexArrays(vaos.len() as i32, vaos.as_mut_ptr());
+        gl::GenBuffers(vbos.len() as i32, vbos.as_mut_ptr());
+
+        gl::BindVertexArray(vaos[0]);
+        gl::BindBuffer(gl::ARRAY_BUFFER, vbos[0]);
+        gl::BufferData(
+            gl::ARRAY_BUFFER,
+            (cube_vertices.len() * mem::size_of::<Vertex>()) as isize,
+            cube_vertices.as_ptr() as *const c_void,
+            gl::STATIC_DRAW,
+        );
+        gl::VertexAttribPointer(
+            0,
+            3,
+            gl::FLOAT,
+            gl::FALSE,
+            mem::size_of::<Vertex>() as i32,
+            offset_of!(Vertex, position) as *const c_void,
+        );
+        gl::EnableVertexAttribArray(0);
+        gl::VertexAttribPointer(
+            1,
+            2,
+            gl::FLOAT,
+            gl::FALSE,
+            mem::size_of::<Vertex>() as i32,
+            offset_of!(Vertex, tex_coord) as *const c_void,
+        );
+        gl::EnableVertexAttribArray(1);
+
+        gl::BindVertexArray(vaos[1]);
+        gl::BindBuffer(gl::ARRAY_BUFFER, vbos[1]);
+        gl::BufferData(
+            gl::ARRAY_BUFFER,
+            (plane_vertices.len() * mem::size_of::<Vertex>()) as isize,
+            plane_vertices.as_ptr() as *const c_void,
+            gl::STATIC_DRAW,
+        );
+        gl::VertexAttribPointer(
+            0,
+            3,
+            gl::FLOAT,
+            gl::FALSE,
+            mem::size_of::<Vertex>() as i32,
+            offset_of!(Vertex, position) as *const c_void,
+        );
+        gl::EnableVertexAttribArray(0);
+        gl::VertexAttribPointer(
+            1,
+            2,
+            gl::FLOAT,
+            gl::FALSE,
+            mem::size_of::<Vertex>() as i32,
+            offset_of!(Vertex, tex_coord) as *const c_void,
+        );
+        gl::EnableVertexAttribArray(1);
+
+        gl::BindVertexArray(0);
+    }
+
     let basic_shader = ShaderProgram::new(VERTEX_SHADER, FRAGMENT_SHADER).unwrap();
+    unsafe {
+        basic_shader.use_program();
+        basic_shader.set_uniform_int("tex", 0);
+    }
+    let cube_texture = unsafe { Texture::load("resources/textures/marble.jpg").unwrap() };
+    let plane_texture = unsafe { Texture::load("resources/textures/metal.png").unwrap() };
 
     let mut prev_frame_time = Instant::now();
     let mut delta_time = 0.0f32;
@@ -143,18 +219,223 @@ fn main() {
                     gl::ClearColor(0.1, 0.1, 0.1, 1.0);
                     gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
+                    basic_shader.use_program();
                     let view = camera.view_matrix();
+                    basic_shader.set_uniform_mat4f("view", view);
                     let projection = glm::perspective(
                         aspect_ratio as f32,
                         camera.fov().to_radians(),
                         0.1,
                         100.0,
                     );
-                }
+                    basic_shader.set_uniform_mat4f("projection", projection);
 
+                    gl::ActiveTexture(gl::TEXTURE0);
+
+                    gl::BindVertexArray(vaos[0]);
+                    gl::BindTexture(gl::TEXTURE_2D, cube_texture.id());
+                    let model = glm::translate(&glm::Mat4::identity(), &glm::vec3(-1.0, 0.0, -1.0));
+                    basic_shader.set_uniform_mat4f("model", model);
+                    gl::DrawArrays(gl::TRIANGLES, 0, cube_vertices.len() as i32);
+                    let model = glm::translate(&glm::Mat4::identity(), &glm::vec3(2.0, 0.0, 0.0));
+                    basic_shader.set_uniform_mat4f("model", model);
+                    gl::DrawArrays(gl::TRIANGLES, 0, cube_vertices.len() as i32);
+
+                    gl::BindVertexArray(vaos[1]);
+                    gl::BindTexture(gl::TEXTURE_2D, plane_texture.id());
+                    basic_shader.set_uniform_mat4f("model", glm::Mat4::identity());
+                    gl::DrawArrays(gl::TRIANGLES, 0, plane_vertices.len() as i32);
+
+                    gl::BindVertexArray(0);
+                    gl::BindTexture(gl::TEXTURE_2D, 0);
+                }
                 context.swap_buffers().unwrap();
             }
             _ => {}
         }
     });
+}
+
+#[repr(C, packed)]
+struct Vertex {
+    position: glm::Vec3,
+    tex_coord: glm::Vec2,
+}
+
+fn cube_vertices() -> Vec<Vertex> {
+    vec![
+        Vertex {
+            position: glm::vec3(-0.5, -0.5, -0.5),
+            tex_coord: glm::vec2(0.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(0.5, -0.5, -0.5),
+            tex_coord: glm::vec2(1.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(0.5, 0.5, -0.5),
+            tex_coord: glm::vec2(1.0, 1.0),
+        },
+        Vertex {
+            position: glm::vec3(0.5, 0.5, -0.5),
+            tex_coord: glm::vec2(1.0, 1.0),
+        },
+        Vertex {
+            position: glm::vec3(-0.5, 0.5, -0.5),
+            tex_coord: glm::vec2(0.0, 1.0),
+        },
+        Vertex {
+            position: glm::vec3(-0.5, -0.5, -0.5),
+            tex_coord: glm::vec2(0.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(-0.5, -0.5, 0.5),
+            tex_coord: glm::vec2(0.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(0.5, -0.5, 0.5),
+            tex_coord: glm::vec2(1.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(0.5, 0.5, 0.5),
+            tex_coord: glm::vec2(1.0, 1.0),
+        },
+        Vertex {
+            position: glm::vec3(0.5, 0.5, 0.5),
+            tex_coord: glm::vec2(1.0, 1.0),
+        },
+        Vertex {
+            position: glm::vec3(-0.5, 0.5, 0.5),
+            tex_coord: glm::vec2(0.0, 1.0),
+        },
+        Vertex {
+            position: glm::vec3(-0.5, -0.5, 0.5),
+            tex_coord: glm::vec2(0.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(-0.5, 0.5, 0.5),
+            tex_coord: glm::vec2(1.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(-0.5, 0.5, -0.5),
+            tex_coord: glm::vec2(1.0, 1.0),
+        },
+        Vertex {
+            position: glm::vec3(-0.5, -0.5, -0.5),
+            tex_coord: glm::vec2(0.0, 1.0),
+        },
+        Vertex {
+            position: glm::vec3(-0.5, -0.5, -0.5),
+            tex_coord: glm::vec2(0.0, 1.0),
+        },
+        Vertex {
+            position: glm::vec3(-0.5, -0.5, 0.5),
+            tex_coord: glm::vec2(0.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(-0.5, 0.5, 0.5),
+            tex_coord: glm::vec2(1.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(0.5, 0.5, 0.5),
+            tex_coord: glm::vec2(1.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(0.5, 0.5, -0.5),
+            tex_coord: glm::vec2(1.0, 1.0),
+        },
+        Vertex {
+            position: glm::vec3(0.5, -0.5, -0.5),
+            tex_coord: glm::vec2(0.0, 1.0),
+        },
+        Vertex {
+            position: glm::vec3(0.5, -0.5, -0.5),
+            tex_coord: glm::vec2(0.0, 1.0),
+        },
+        Vertex {
+            position: glm::vec3(0.5, -0.5, 0.5),
+            tex_coord: glm::vec2(0.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(0.5, 0.5, 0.5),
+            tex_coord: glm::vec2(1.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(-0.5, -0.5, -0.5),
+            tex_coord: glm::vec2(0.0, 1.0),
+        },
+        Vertex {
+            position: glm::vec3(0.5, -0.5, -0.5),
+            tex_coord: glm::vec2(1.0, 1.0),
+        },
+        Vertex {
+            position: glm::vec3(0.5, -0.5, 0.5),
+            tex_coord: glm::vec2(1.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(0.5, -0.5, 0.5),
+            tex_coord: glm::vec2(1.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(-0.5, -0.5, 0.5),
+            tex_coord: glm::vec2(0.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(-0.5, -0.5, -0.5),
+            tex_coord: glm::vec2(0.0, 1.0),
+        },
+        Vertex {
+            position: glm::vec3(-0.5, 0.5, -0.5),
+            tex_coord: glm::vec2(0.0, 1.0),
+        },
+        Vertex {
+            position: glm::vec3(0.5, 0.5, -0.5),
+            tex_coord: glm::vec2(1.0, 1.0),
+        },
+        Vertex {
+            position: glm::vec3(0.5, 0.5, 0.5),
+            tex_coord: glm::vec2(1.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(0.5, 0.5, 0.5),
+            tex_coord: glm::vec2(1.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(-0.5, 0.5, 0.5),
+            tex_coord: glm::vec2(0.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(-0.5, 0.5, -0.5),
+            tex_coord: glm::vec2(0.0, 1.0),
+        },
+    ]
+}
+
+fn plane_vertices() -> Vec<Vertex> {
+    vec![
+        Vertex {
+            position: glm::vec3(5.0, -0.5, 5.0),
+            tex_coord: glm::vec2(2.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(-5.0, -0.5, 5.0),
+            tex_coord: glm::vec2(0.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(-5.0, -0.5, -5.0),
+            tex_coord: glm::vec2(0.0, 2.0),
+        },
+        Vertex {
+            position: glm::vec3(5.0, -0.5, 5.0),
+            tex_coord: glm::vec2(2.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(-5.0, -0.5, -5.0),
+            tex_coord: glm::vec2(0.0, 2.0),
+        },
+        Vertex {
+            position: glm::vec3(5.0, -0.5, -5.0),
+            tex_coord: glm::vec2(2.0, 2.0),
+        },
+    ]
 }
