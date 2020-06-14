@@ -17,8 +17,8 @@ use camera::{Camera, CameraMotion};
 use model::Model;
 use shader_program::ShaderProgram;
 
-const VERTEX_SHADER: &str = include_str!("shaders/default.vert");
-const FRAGMENT_SHADER: &str = include_str!("shaders/default.frag");
+const VERTEX_SHADER: &str = include_str!("shaders/lighting.vert");
+const FRAGMENT_SHADER: &str = include_str!("shaders/lighting.frag");
 const LIGHT_SOURCE_FRAGMENT_SHADER: &str = include_str!("shaders/light-source.frag");
 
 const MULTISAMPLING_SAMPLES: u16 = 4;
