@@ -1,10 +1,10 @@
-use std::ffi::c_void;
-use std::mem;
-use std::ptr;
+mod camera;
+mod model;
+mod shader_program;
+
 use std::time::Instant;
 
 use glutin::{Api, ContextBuilder, GlProfile, GlRequest};
-use image::GenericImageView;
 use nalgebra_glm as glm;
 use winit::{
     event::{DeviceEvent, ElementState, Event, MouseScrollDelta, VirtualKeyCode, WindowEvent},
@@ -12,10 +12,8 @@ use winit::{
     window::{Fullscreen, WindowBuilder},
 };
 
-mod camera;
-mod shader_program;
-
 use camera::{Camera, CameraMotion};
+use model::Model;
 use shader_program::ShaderProgram;
 
 const VERTEX_SHADER: &str = include_str!("shaders/default.vert");
@@ -48,303 +46,8 @@ fn main() {
         gl::Enable(gl::MULTISAMPLE);
     }
 
-    let cube_vertices = [
-        Vertex {
-            position: glm::vec3(-0.5, -0.5, -0.5),
-            normal: glm::vec3(0.0, 0.0, -1.0),
-            texture_coords: glm::vec2(0.0, 0.0),
-        },
-        Vertex {
-            position: glm::vec3(0.5, -0.5, -0.5),
-            normal: glm::vec3(0.0, 0.0, -1.0),
-            texture_coords: glm::vec2(1.0, 0.0),
-        },
-        Vertex {
-            position: glm::vec3(0.5, 0.5, -0.5),
-            normal: glm::vec3(0.0, 0.0, -1.0),
-            texture_coords: glm::vec2(1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(0.5, 0.5, -0.5),
-            normal: glm::vec3(0.0, 0.0, -1.0),
-            texture_coords: glm::vec2(1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(-0.5, 0.5, -0.5),
-            normal: glm::vec3(0.0, 0.0, -1.0),
-            texture_coords: glm::vec2(0.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(-0.5, -0.5, -0.5),
-            normal: glm::vec3(0.0, 0.0, -1.0),
-            texture_coords: glm::vec2(0.0, 0.0),
-        },
-        Vertex {
-            position: glm::vec3(-0.5, -0.5, 0.5),
-            normal: glm::vec3(0.0, 0.0, 1.0),
-            texture_coords: glm::vec2(0.0, 0.0),
-        },
-        Vertex {
-            position: glm::vec3(0.5, -0.5, 0.5),
-            normal: glm::vec3(0.0, 0.0, 1.0),
-            texture_coords: glm::vec2(1.0, 0.0),
-        },
-        Vertex {
-            position: glm::vec3(0.5, 0.5, 0.5),
-            normal: glm::vec3(0.0, 0.0, 1.0),
-            texture_coords: glm::vec2(1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(0.5, 0.5, 0.5),
-            normal: glm::vec3(0.0, 0.0, 1.0),
-            texture_coords: glm::vec2(1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(-0.5, 0.5, 0.5),
-            normal: glm::vec3(0.0, 0.0, 1.0),
-            texture_coords: glm::vec2(0.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(-0.5, -0.5, 0.5),
-            normal: glm::vec3(0.0, 0.0, 1.0),
-            texture_coords: glm::vec2(0.0, 0.0),
-        },
-        Vertex {
-            position: glm::vec3(-0.5, 0.5, 0.5),
-            normal: glm::vec3(-1.0, 0.0, 0.0),
-            texture_coords: glm::vec2(0.0, 0.0),
-        },
-        Vertex {
-            position: glm::vec3(-0.5, 0.5, -0.5),
-            normal: glm::vec3(-1.0, 0.0, 0.0),
-            texture_coords: glm::vec2(1.0, 0.0),
-        },
-        Vertex {
-            position: glm::vec3(-0.5, -0.5, -0.5),
-            normal: glm::vec3(-1.0, 0.0, 0.0),
-            texture_coords: glm::vec2(1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(-0.5, -0.5, -0.5),
-            normal: glm::vec3(-1.0, 0.0, 0.0),
-            texture_coords: glm::vec2(1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(-0.5, -0.5, 0.5),
-            normal: glm::vec3(-1.0, 0.0, 0.0),
-            texture_coords: glm::vec2(0.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(-0.5, 0.5, 0.5),
-            normal: glm::vec3(-1.0, 0.0, 0.0),
-            texture_coords: glm::vec2(0.0, 0.0),
-        },
-        Vertex {
-            position: glm::vec3(0.5, 0.5, 0.5),
-            normal: glm::vec3(1.0, 0.0, 0.0),
-            texture_coords: glm::vec2(0.0, 0.0),
-        },
-        Vertex {
-            position: glm::vec3(0.5, 0.5, -0.5),
-            normal: glm::vec3(1.0, 0.0, 0.0),
-            texture_coords: glm::vec2(1.0, 0.0),
-        },
-        Vertex {
-            position: glm::vec3(0.5, -0.5, -0.5),
-            normal: glm::vec3(1.0, 0.0, 0.0),
-            texture_coords: glm::vec2(1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(0.5, -0.5, -0.5),
-            normal: glm::vec3(1.0, 0.0, 0.0),
-            texture_coords: glm::vec2(1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(0.5, -0.5, 0.5),
-            normal: glm::vec3(1.0, 0.0, 0.0),
-            texture_coords: glm::vec2(0.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(0.5, 0.5, 0.5),
-            normal: glm::vec3(1.0, 0.0, 0.0),
-            texture_coords: glm::vec2(0.0, 0.0),
-        },
-        Vertex {
-            position: glm::vec3(-0.5, -0.5, -0.5),
-            normal: glm::vec3(0.0, -1.0, 0.0),
-            texture_coords: glm::vec2(0.0, 0.0),
-        },
-        Vertex {
-            position: glm::vec3(0.5, -0.5, -0.5),
-            normal: glm::vec3(0.0, -1.0, 0.0),
-            texture_coords: glm::vec2(1.0, 0.0),
-        },
-        Vertex {
-            position: glm::vec3(0.5, -0.5, 0.5),
-            normal: glm::vec3(0.0, -1.0, 0.0),
-            texture_coords: glm::vec2(1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(0.5, -0.5, 0.5),
-            normal: glm::vec3(0.0, -1.0, 0.0),
-            texture_coords: glm::vec2(1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(-0.5, -0.5, 0.5),
-            normal: glm::vec3(0.0, -1.0, 0.0),
-            texture_coords: glm::vec2(0.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(-0.5, -0.5, -0.5),
-            normal: glm::vec3(0.0, -1.0, 0.0),
-            texture_coords: glm::vec2(0.0, 0.0),
-        },
-        Vertex {
-            position: glm::vec3(-0.5, 0.5, -0.5),
-            normal: glm::vec3(0.0, 1.0, 0.0),
-            texture_coords: glm::vec2(0.0, 0.0),
-        },
-        Vertex {
-            position: glm::vec3(0.5, 0.5, -0.5),
-            normal: glm::vec3(0.0, 1.0, 0.0),
-            texture_coords: glm::vec2(1.0, 0.0),
-        },
-        Vertex {
-            position: glm::vec3(0.5, 0.5, 0.5),
-            normal: glm::vec3(0.0, 1.0, 0.0),
-            texture_coords: glm::vec2(1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(0.5, 0.5, 0.5),
-            normal: glm::vec3(0.0, 1.0, 0.0),
-            texture_coords: glm::vec2(1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(-0.5, 0.5, 0.5),
-            normal: glm::vec3(0.0, 1.0, 0.0),
-            texture_coords: glm::vec2(0.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(-0.5, 0.5, -0.5),
-            normal: glm::vec3(0.0, 1.0, 0.0),
-            texture_coords: glm::vec2(0.0, 0.0),
-        },
-    ];
-
-    let cube_positions = [
-        glm::vec3(0.0, 0.0, 0.0),
-        glm::vec3(2.0, 5.0, -15.0),
-        glm::vec3(-1.5, -2.2, -2.5),
-        glm::vec3(-3.8, -2.0, -12.3),
-        glm::vec3(2.4, -0.4, -3.5),
-        glm::vec3(-1.7, 3.0, -7.5),
-        glm::vec3(1.3, -2.0, -2.5),
-        glm::vec3(1.5, 2.0, -2.5),
-        glm::vec3(1.5, 0.2, -1.5),
-        glm::vec3(-1.3, 1.0, -1.5),
-    ];
-
-    let point_light_positions = [
-        glm::vec3(0.7, 0.2, 2.0),
-        glm::vec3(2.3, -3.3, -4.0),
-        glm::vec3(-4.0, 2.0, -12.0),
-        glm::vec3(0.0, 0.0, -3.0),
-    ];
-
-    let mut vaos = [0; 2];
-    let mut vbos = [0; 1];
-    unsafe {
-        gl::GenVertexArrays(vaos.len() as i32, vaos.as_mut_ptr());
-        gl::GenBuffers(vbos.len() as i32, vbos.as_mut_ptr());
-        gl::BindVertexArray(vaos[0]);
-        gl::BindBuffer(gl::ARRAY_BUFFER, vbos[0]);
-        gl::BufferData(
-            gl::ARRAY_BUFFER,
-            (cube_vertices.len() * mem::size_of::<Vertex>()) as isize,
-            cube_vertices.as_ptr() as *const c_void,
-            gl::STATIC_DRAW,
-        );
-        gl::VertexAttribPointer(
-            0,
-            3,
-            gl::FLOAT,
-            gl::FALSE,
-            mem::size_of::<Vertex>() as i32,
-            ptr::null(),
-        );
-        gl::EnableVertexAttribArray(0);
-
-        gl::BindVertexArray(vaos[1]);
-        gl::BindBuffer(gl::ARRAY_BUFFER, vbos[0]);
-        gl::VertexAttribPointer(
-            0,
-            3,
-            gl::FLOAT,
-            gl::FALSE,
-            mem::size_of::<Vertex>() as i32,
-            ptr::null(),
-        );
-        gl::EnableVertexAttribArray(0);
-        gl::VertexAttribPointer(
-            1,
-            3,
-            gl::FLOAT,
-            gl::FALSE,
-            mem::size_of::<Vertex>() as i32,
-            (3 * mem::size_of::<f32>()) as *const c_void,
-        );
-        gl::EnableVertexAttribArray(1);
-        gl::VertexAttribPointer(
-            2,
-            2,
-            gl::FLOAT,
-            gl::FALSE,
-            mem::size_of::<Vertex>() as i32,
-            (6 * mem::size_of::<f32>()) as *const c_void,
-        );
-        gl::EnableVertexAttribArray(2);
-    }
-
-    let diffuse = image::open("container2.png").unwrap().flipv();
-    let specular = image::open("container2_specular.png").unwrap().flipv();
-
-    let mut textures = [0; 2];
-    unsafe {
-        gl::GenTextures(textures.len() as i32, textures.as_mut_ptr());
-        let (width, height) = diffuse.dimensions();
-        gl::ActiveTexture(gl::TEXTURE0);
-        gl::BindTexture(gl::TEXTURE_2D, textures[0]);
-        gl::TexImage2D(
-            gl::TEXTURE_2D,
-            0,
-            gl::RGBA8 as i32,
-            width as i32,
-            height as i32,
-            0,
-            gl::RGBA,
-            gl::UNSIGNED_BYTE,
-            diffuse.into_rgba().into_raw().as_ptr() as *const c_void,
-        );
-        gl::GenerateMipmap(gl::TEXTURE_2D);
-
-        let (width, height) = specular.dimensions();
-        gl::ActiveTexture(gl::TEXTURE1);
-        gl::BindTexture(gl::TEXTURE_2D, textures[1]);
-        gl::TexImage2D(
-            gl::TEXTURE_2D,
-            0,
-            gl::RGBA8 as i32,
-            width as i32,
-            height as i32,
-            0,
-            gl::RGBA,
-            gl::UNSIGNED_BYTE,
-            specular.into_rgba().into_raw().as_ptr() as *const c_void,
-        );
-        gl::GenerateMipmap(gl::TEXTURE_2D);
-    }
-
     let light_color = glm::vec3(1.0, 1.0, 1.0);
+    let point_light_position = glm::vec3(2.0, 2.0, 2.0);
     let light_source_shader =
         ShaderProgram::new(VERTEX_SHADER, LIGHT_SOURCE_FRAGMENT_SHADER).unwrap();
 
@@ -353,35 +56,35 @@ fn main() {
     let ambient_color = diffuse_color * 0.2;
     unsafe {
         default_shader.use_program();
+        default_shader.set_uniform_mat4f("model", glm::Mat4::identity());
+
         default_shader.set_uniform_vec3f("directionalLight.direction", glm::vec3(-0.2, -1.0, -0.3));
         default_shader.set_uniform_vec3f("directionalLight.ambient", ambient_color);
         default_shader.set_uniform_vec3f("directionalLight.diffuse", diffuse_color);
         default_shader.set_uniform_vec3f("directionalLight.specular", light_color);
 
-        for (i, &pos) in point_light_positions.iter().enumerate() {
-            let light = format!("pointLights[{}]", i);
-            default_shader.set_uniform_vec3f(&format!("{}.position", light), pos);
-            default_shader.set_uniform_float(&format!("{}.constant", light), 1.0);
-            default_shader.set_uniform_float(&format!("{}.linear", light), 0.09);
-            default_shader.set_uniform_float(&format!("{}.quadratic", light), 0.032);
-            default_shader.set_uniform_vec3f(&format!("{}.ambient", light), ambient_color);
-            default_shader.set_uniform_vec3f(&format!("{}.diffuse", light), diffuse_color);
-            default_shader.set_uniform_vec3f(&format!("{}.specular", light), light_color);
-        }
+        default_shader.set_uniform_vec3f("pointLight.position", point_light_position);
+        default_shader.set_uniform_float("pointLight.constant", 1.0);
+        default_shader.set_uniform_float("pointLight.linear", 0.09);
+        default_shader.set_uniform_float("pointLight.quadratic", 0.032);
+        default_shader.set_uniform_vec3f("pointLight.ambient", ambient_color);
+        default_shader.set_uniform_vec3f("pointLight.diffuse", diffuse_color);
+        default_shader.set_uniform_vec3f("pointLight.specular", light_color);
 
-        default_shader.set_uniform_float("spotLight.innerCutoff", 12.5f32.to_radians().cos());
-        default_shader.set_uniform_float("spotLight.outerCutoff", 17.5f32.to_radians().cos());
-        default_shader.set_uniform_float("spotLight.linear", 0.09);
-        default_shader.set_uniform_float("spotLight.quadratic", 0.032);
-        default_shader.set_uniform_vec3f("spotLight.ambient", ambient_color);
-        default_shader.set_uniform_vec3f("spotLight.ambient", ambient_color);
-        default_shader.set_uniform_vec3f("spotLight.diffuse", diffuse_color);
-        default_shader.set_uniform_vec3f("spotLight.specular", light_color);
+        // default_shader.set_uniform_float("spotLight.innerCutoff", 12.5f32.to_radians().cos());
+        // default_shader.set_uniform_float("spotLight.outerCutoff", 17.5f32.to_radians().cos());
+        // default_shader.set_uniform_float("spotLight.linear", 0.09);
+        // default_shader.set_uniform_float("spotLight.quadratic", 0.032);
+        // default_shader.set_uniform_vec3f("spotLight.ambient", ambient_color);
+        // default_shader.set_uniform_vec3f("spotLight.ambient", ambient_color);
+        // default_shader.set_uniform_vec3f("spotLight.diffuse", diffuse_color);
+        // default_shader.set_uniform_vec3f("spotLight.specular", light_color);
 
-        default_shader.set_uniform_int("material.diffuse", 0);
-        default_shader.set_uniform_int("material.specular", 1);
         default_shader.set_uniform_float("material.shininess", 32.0);
     }
+
+    let cube = unsafe { Model::load("models/cube/cube.obj").unwrap() };
+    let backpack = unsafe { Model::load("models/backpack/backpack.obj").unwrap() };
 
     let mut prev_frame_time = Instant::now();
     let mut delta_time = 0.0f32;
@@ -485,49 +188,32 @@ fn main() {
                     );
 
                     light_source_shader.use_program();
-                    for &(name, val) in &[("view", view), ("projection", projection)] {
-                        light_source_shader.set_uniform_mat4f(name, val);
-                    }
-                    gl::BindVertexArray(vaos[0]);
-                    for &pos in point_light_positions.iter() {
-                        let mut model = glm::translate(&glm::Mat4::identity(), &pos);
-                        model = glm::scale(&model, &glm::vec3(0.2, 0.2, 0.2));
-                        light_source_shader.set_uniform_mat4f("model", model);
-                        light_source_shader.set_uniform_vec3f("color", light_color);
-                        gl::DrawArrays(gl::TRIANGLES, 0, 36);
-                    }
+                    light_source_shader.set_uniform_mat4f("view", view);
+                    light_source_shader.set_uniform_mat4f("projection", projection);
+                    let mut model = glm::translate(&glm::Mat4::identity(), &point_light_position);
+                    model = glm::scale(&model, &glm::vec3(0.2, 0.2, 0.2));
+                    light_source_shader.set_uniform_mat4f("model", model);
+                    light_source_shader.set_uniform_vec3f("color", light_color);
+                    cube.draw(&light_source_shader);
 
                     default_shader.use_program();
                     default_shader.set_uniform_vec3f("viewPos", camera.position());
                     default_shader.set_uniform_mat4f("view", view);
                     default_shader.set_uniform_mat4f("projection", projection);
-                    default_shader.set_uniform_vec3f("spotLight.position", camera.position());
-                    default_shader.set_uniform_vec3f("spotLight.direction", camera.front());
-                    gl::BindVertexArray(vaos[1]);
-                    for (i, pos) in cube_positions.iter().enumerate() {
-                        let mut model = glm::translate(&glm::Mat4::identity(), pos);
-                        let angle = 20.0 * i as f32;
-                        model = glm::rotate(&model, angle.to_radians(), &glm::vec3(1.0, 0.3, 0.5));
-                        default_shader.set_uniform_mat4f("model", model);
-                        gl::DrawArrays(gl::TRIANGLES, 0, 36);
-                    }
+                    // default_shader.set_uniform_vec3f("spotLight.position", camera.position());
+                    // default_shader.set_uniform_vec3f("spotLight.direction", camera.front());
+
+                    backpack.draw(&default_shader);
                 }
 
                 context.swap_buffers().unwrap();
             }
-            Event::LoopDestroyed => unsafe {
-                gl::DeleteVertexArrays(vaos.len() as i32, vaos.as_ptr());
-                gl::DeleteBuffers(vbos.len() as i32, vbos.as_ptr());
-                gl::DeleteTextures(textures.len() as i32, textures.as_ptr());
-            },
+            // Event::LoopDestroyed => unsafe {
+            //     gl::DeleteVertexArrays(vaos.len() as i32, vaos.as_ptr());
+            //     gl::DeleteBuffers(vbos.len() as i32, vbos.as_ptr());
+            //     gl::DeleteTextures(textures.len() as i32, textures.as_ptr());
+            // },
             _ => {}
         }
     });
-}
-
-#[repr(C)]
-struct Vertex {
-    position: glm::Vec3,
-    normal: glm::Vec3,
-    texture_coords: glm::Vec2,
 }
