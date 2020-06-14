@@ -23,6 +23,8 @@ use texture::Texture;
 const VERTEX_SHADER: &str = include_str!("shaders/basic.vert");
 const FRAGMENT_SHADER: &str = include_str!("shaders/basic.frag");
 
+const BORDER_FRAGMENT_SHADER: &str = include_str!("shaders/single_color.frag");
+
 const MULTISAMPLING_SAMPLES: u16 = 4;
 
 fn main() {
@@ -46,9 +48,10 @@ fn main() {
     gl::load_with(|s| context.get_proc_address(s));
     unsafe {
         gl::Enable(gl::DEPTH_TEST);
+        gl::Enable(gl::STENCIL_TEST);
         gl::Enable(gl::MULTISAMPLE);
         gl::ClearColor(0.1, 0.1, 0.1, 1.0);
-        gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+        gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT | gl::STENCIL_BUFFER_BIT);
         context.swap_buffers().unwrap();
     }
 
@@ -118,6 +121,7 @@ fn main() {
         gl::BindVertexArray(0);
     }
 
+    let border_shader = ShaderProgram::new(VERTEX_SHADER, BORDER_FRAGMENT_SHADER).unwrap();
     let basic_shader = ShaderProgram::new(VERTEX_SHADER, FRAGMENT_SHADER).unwrap();
     unsafe {
         basic_shader.use_program();
@@ -217,21 +221,33 @@ fn main() {
 
                 unsafe {
                     gl::ClearColor(0.1, 0.1, 0.1, 1.0);
-                    gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+                    gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT | gl::STENCIL_BUFFER_BIT);
 
-                    basic_shader.use_program();
                     let view = camera.view_matrix();
-                    basic_shader.set_uniform_mat4f("view", view);
                     let projection = glm::perspective(
                         aspect_ratio as f32,
                         camera.fov().to_radians(),
                         0.1,
                         100.0,
                     );
+                    basic_shader.use_program();
+                    basic_shader.set_uniform_mat4f("view", view);
                     basic_shader.set_uniform_mat4f("projection", projection);
+                    border_shader.use_program();
+                    border_shader.set_uniform_mat4f("view", view);
+                    border_shader.set_uniform_mat4f("projection", projection);
 
                     gl::ActiveTexture(gl::TEXTURE0);
 
+                    basic_shader.use_program();
+                    gl::BindVertexArray(vaos[1]);
+                    gl::BindTexture(gl::TEXTURE_2D, plane_texture.id());
+                    basic_shader.set_uniform_mat4f("model", glm::Mat4::identity());
+                    gl::DrawArrays(gl::TRIANGLES, 0, plane_vertices.len() as i32);
+
+                    gl::StencilOp(gl::KEEP, gl::KEEP, gl::REPLACE);
+                    gl::StencilFunc(gl::ALWAYS, 1, 0xFF);
+                    gl::StencilMask(0xFF);
                     gl::BindVertexArray(vaos[0]);
                     gl::BindTexture(gl::TEXTURE_2D, cube_texture.id());
                     let model = glm::translate(&glm::Mat4::identity(), &glm::vec3(-1.0, 0.0, -1.0));
@@ -241,10 +257,26 @@ fn main() {
                     basic_shader.set_uniform_mat4f("model", model);
                     gl::DrawArrays(gl::TRIANGLES, 0, cube_vertices.len() as i32);
 
-                    gl::BindVertexArray(vaos[1]);
-                    gl::BindTexture(gl::TEXTURE_2D, plane_texture.id());
-                    basic_shader.set_uniform_mat4f("model", glm::Mat4::identity());
-                    gl::DrawArrays(gl::TRIANGLES, 0, plane_vertices.len() as i32);
+                    gl::StencilFunc(gl::NOTEQUAL, 1, 0xFF);
+                    gl::StencilMask(0);
+                    gl::Disable(gl::DEPTH_TEST);
+                    border_shader.use_program();
+                    let scale = 1.05;
+                    let mut model =
+                        glm::translate(&glm::Mat4::identity(), &glm::vec3(-1.0, 0.0, -1.0));
+                    model = glm::scale(&model, &glm::vec3(scale, scale, scale));
+                    border_shader.set_uniform_mat4f("model", model);
+                    gl::DrawArrays(gl::TRIANGLES, 0, cube_vertices.len() as i32);
+                    let mut model =
+                        glm::translate(&glm::Mat4::identity(), &glm::vec3(2.0, 0.0, 0.0));
+                    model = glm::scale(&model, &glm::vec3(scale, scale, scale));
+                    border_shader.set_uniform_mat4f("model", model);
+                    gl::DrawArrays(gl::TRIANGLES, 0, cube_vertices.len() as i32);
+
+                    gl::StencilMask(0xFF);
+                    gl::StencilOp(gl::KEEP, gl::KEEP, gl::KEEP);
+                    gl::StencilFunc(gl::ALWAYS, 0, 0xFF);
+                    gl::Enable(gl::DEPTH_TEST);
 
                     gl::BindVertexArray(0);
                     gl::BindTexture(gl::TEXTURE_2D, 0);
