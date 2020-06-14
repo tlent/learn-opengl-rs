@@ -44,6 +44,9 @@ fn main() {
     unsafe {
         gl::Enable(gl::DEPTH_TEST);
         gl::Enable(gl::MULTISAMPLE);
+        gl::ClearColor(0.1, 0.1, 0.1, 1.0);
+        gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+        context.swap_buffers().unwrap();
     }
 
     let light_color = glm::vec3(1.0, 1.0, 1.0);
@@ -208,11 +211,6 @@ fn main() {
 
                 context.swap_buffers().unwrap();
             }
-            // Event::LoopDestroyed => unsafe {
-            //     gl::DeleteVertexArrays(vaos.len() as i32, vaos.as_ptr());
-            //     gl::DeleteBuffers(vbos.len() as i32, vbos.as_ptr());
-            //     gl::DeleteTextures(textures.len() as i32, textures.as_ptr());
-            // },
             _ => {}
         }
     });

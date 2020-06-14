@@ -9,6 +9,8 @@ use image::GenericImageView;
 use memoffset::offset_of;
 use nalgebra_glm as glm;
 
+use std::time::{Duration, Instant};
+
 use crate::shader_program::ShaderProgram;
 
 pub struct Model {
@@ -206,6 +208,15 @@ impl Mesh {
     }
 }
 
+impl Drop for Mesh {
+    fn drop(&mut self) {
+        unsafe {
+            gl::DeleteVertexArrays(1, &self.vao);
+            gl::DeleteBuffers(2, [self.vbo, self.ebo].as_ptr());
+        }
+    }
+}
+
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
 struct Vertex {
@@ -280,6 +291,14 @@ impl Texture {
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
 
         Ok(Self { id, type_ })
+    }
+}
+
+impl Drop for Texture {
+    fn drop(&mut self) {
+        unsafe {
+            gl::DeleteTextures(1, &self.id);
+        }
     }
 }
 
