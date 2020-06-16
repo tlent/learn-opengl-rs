@@ -14,7 +14,7 @@ impl Texture {
     where
         P: AsRef<Path>,
     {
-        let image = image::open(path)?;
+        let image = image::open(path)?.flipv();
         let (width, height) = image.dimensions();
         let raw = image.into_rgba().into_raw();
 
@@ -24,7 +24,7 @@ impl Texture {
         gl::TexImage2D(
             gl::TEXTURE_2D,
             0,
-            gl::RGB8 as i32,
+            gl::RGBA8 as i32,
             width as i32,
             height as i32,
             0,
@@ -46,6 +46,13 @@ impl Texture {
         gl::BindTexture(gl::TEXTURE_2D, 0);
 
         Ok(Self { id })
+    }
+
+    pub unsafe fn set_wrap(&self, wrap_s: gl::types::GLenum, wrap_t: gl::types::GLenum) {
+        gl::BindTexture(gl::TEXTURE_2D, self.id);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, wrap_s as i32);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, wrap_t as i32);
+        gl::BindTexture(gl::TEXTURE_2D, 0);
     }
 
     pub fn id(&self) -> u32 {

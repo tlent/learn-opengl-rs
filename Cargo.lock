@@ -553,6 +553,7 @@ dependencies = [
  "image",
  "memoffset",
  "nalgebra-glm",
+ "ordered-float",
  "tobj",
  "winit",
 ]

@@ -10,6 +10,7 @@ use std::time::Instant;
 use glutin::{Api, ContextBuilder, GlProfile, GlRequest};
 use memoffset::offset_of;
 use nalgebra_glm as glm;
+use ordered_float::NotNan;
 use winit::{
     event::{DeviceEvent, ElementState, Event, MouseScrollDelta, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
@@ -22,8 +23,6 @@ use texture::Texture;
 
 const VERTEX_SHADER: &str = include_str!("shaders/basic.vert");
 const FRAGMENT_SHADER: &str = include_str!("shaders/basic.frag");
-
-const BORDER_FRAGMENT_SHADER: &str = include_str!("shaders/single_color.frag");
 
 const MULTISAMPLING_SAMPLES: u16 = 4;
 
@@ -48,18 +47,20 @@ fn main() {
     gl::load_with(|s| context.get_proc_address(s));
     unsafe {
         gl::Enable(gl::DEPTH_TEST);
-        gl::Enable(gl::STENCIL_TEST);
         gl::Enable(gl::MULTISAMPLE);
+        gl::Enable(gl::BLEND);
+        gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         gl::ClearColor(0.1, 0.1, 0.1, 1.0);
-        gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT | gl::STENCIL_BUFFER_BIT);
+        gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         context.swap_buffers().unwrap();
     }
 
     let cube_vertices = cube_vertices();
     let plane_vertices = plane_vertices();
+    let quad_vertices = quad_vertices();
 
-    let mut vaos = [0; 2];
-    let mut vbos = [0; 2];
+    let mut vaos = [0; 3];
+    let mut vbos = [0; 3];
     unsafe {
         gl::GenVertexArrays(vaos.len() as i32, vaos.as_mut_ptr());
         gl::GenBuffers(vbos.len() as i32, vbos.as_mut_ptr());
@@ -118,10 +119,36 @@ fn main() {
         );
         gl::EnableVertexAttribArray(1);
 
+        gl::BindVertexArray(vaos[2]);
+        gl::BindBuffer(gl::ARRAY_BUFFER, vbos[2]);
+        gl::BufferData(
+            gl::ARRAY_BUFFER,
+            (quad_vertices.len() * mem::size_of::<Vertex>()) as isize,
+            quad_vertices.as_ptr() as *const c_void,
+            gl::STATIC_DRAW,
+        );
+        gl::VertexAttribPointer(
+            0,
+            3,
+            gl::FLOAT,
+            gl::FALSE,
+            mem::size_of::<Vertex>() as i32,
+            offset_of!(Vertex, position) as *const c_void,
+        );
+        gl::EnableVertexAttribArray(0);
+        gl::VertexAttribPointer(
+            1,
+            2,
+            gl::FLOAT,
+            gl::FALSE,
+            mem::size_of::<Vertex>() as i32,
+            offset_of!(Vertex, tex_coord) as *const c_void,
+        );
+        gl::EnableVertexAttribArray(1);
+
         gl::BindVertexArray(0);
     }
 
-    let border_shader = ShaderProgram::new(VERTEX_SHADER, BORDER_FRAGMENT_SHADER).unwrap();
     let basic_shader = ShaderProgram::new(VERTEX_SHADER, FRAGMENT_SHADER).unwrap();
     unsafe {
         basic_shader.use_program();
@@ -129,6 +156,10 @@ fn main() {
     }
     let cube_texture = unsafe { Texture::load("resources/textures/marble.jpg").unwrap() };
     let plane_texture = unsafe { Texture::load("resources/textures/metal.png").unwrap() };
+    let window_texture = unsafe { Texture::load("resources/textures/window.png").unwrap() };
+    unsafe {
+        window_texture.set_wrap(gl::CLAMP_TO_EDGE, gl::CLAMP_TO_EDGE);
+    }
 
     let mut prev_frame_time = Instant::now();
     let mut delta_time = 0.0f32;
@@ -233,50 +264,41 @@ fn main() {
                     basic_shader.use_program();
                     basic_shader.set_uniform_mat4f("view", view);
                     basic_shader.set_uniform_mat4f("projection", projection);
-                    border_shader.use_program();
-                    border_shader.set_uniform_mat4f("view", view);
-                    border_shader.set_uniform_mat4f("projection", projection);
 
                     gl::ActiveTexture(gl::TEXTURE0);
 
-                    basic_shader.use_program();
+                    gl::BindVertexArray(vaos[0]);
+                    gl::BindTexture(gl::TEXTURE_2D, cube_texture.id());
+                    let cube_positions = [glm::vec3(-1.0, 0.0, -1.0), glm::vec3(2.0, 0.0, 0.0)];
+                    for p in cube_positions.iter() {
+                        let model = glm::translate(&glm::Mat4::identity(), p);
+                        basic_shader.set_uniform_mat4f("model", model);
+                        gl::DrawArrays(gl::TRIANGLES, 0, cube_vertices.len() as i32);
+                    }
+
                     gl::BindVertexArray(vaos[1]);
                     gl::BindTexture(gl::TEXTURE_2D, plane_texture.id());
                     basic_shader.set_uniform_mat4f("model", glm::Mat4::identity());
                     gl::DrawArrays(gl::TRIANGLES, 0, plane_vertices.len() as i32);
 
-                    gl::StencilOp(gl::KEEP, gl::KEEP, gl::REPLACE);
-                    gl::StencilFunc(gl::ALWAYS, 1, 0xFF);
-                    gl::StencilMask(0xFF);
-                    gl::BindVertexArray(vaos[0]);
-                    gl::BindTexture(gl::TEXTURE_2D, cube_texture.id());
-                    let model = glm::translate(&glm::Mat4::identity(), &glm::vec3(-1.0, 0.0, -1.0));
-                    basic_shader.set_uniform_mat4f("model", model);
-                    gl::DrawArrays(gl::TRIANGLES, 0, cube_vertices.len() as i32);
-                    let model = glm::translate(&glm::Mat4::identity(), &glm::vec3(2.0, 0.0, 0.0));
-                    basic_shader.set_uniform_mat4f("model", model);
-                    gl::DrawArrays(gl::TRIANGLES, 0, cube_vertices.len() as i32);
-
-                    gl::StencilFunc(gl::NOTEQUAL, 1, 0xFF);
-                    gl::StencilMask(0);
-                    gl::Disable(gl::DEPTH_TEST);
-                    border_shader.use_program();
-                    let scale = 1.05;
-                    let mut model =
-                        glm::translate(&glm::Mat4::identity(), &glm::vec3(-1.0, 0.0, -1.0));
-                    model = glm::scale(&model, &glm::vec3(scale, scale, scale));
-                    border_shader.set_uniform_mat4f("model", model);
-                    gl::DrawArrays(gl::TRIANGLES, 0, cube_vertices.len() as i32);
-                    let mut model =
-                        glm::translate(&glm::Mat4::identity(), &glm::vec3(2.0, 0.0, 0.0));
-                    model = glm::scale(&model, &glm::vec3(scale, scale, scale));
-                    border_shader.set_uniform_mat4f("model", model);
-                    gl::DrawArrays(gl::TRIANGLES, 0, cube_vertices.len() as i32);
-
-                    gl::StencilMask(0xFF);
-                    gl::StencilOp(gl::KEEP, gl::KEEP, gl::KEEP);
-                    gl::StencilFunc(gl::ALWAYS, 0, 0xFF);
-                    gl::Enable(gl::DEPTH_TEST);
+                    gl::BindVertexArray(vaos[2]);
+                    gl::BindTexture(gl::TEXTURE_2D, window_texture.id());
+                    let mut positions = [
+                        glm::vec3(-1.5, 0.0, -0.48),
+                        glm::vec3(1.5, 0.0, 0.51),
+                        glm::vec3(0.0, 0.0, 0.7),
+                        glm::vec3(-0.3, 0.0, -2.3),
+                        glm::vec3(0.5, 0.0, -0.6),
+                    ];
+                    positions.sort_by_key(|p| {
+                        let distance = glm::length(&(p - camera.position()));
+                        NotNan::new(distance).unwrap()
+                    });
+                    for p in positions.iter().rev() {
+                        let model = glm::translate(&glm::Mat4::identity(), p);
+                        basic_shader.set_uniform_mat4f("model", model);
+                        gl::DrawArrays(gl::TRIANGLE_STRIP, 0, quad_vertices.len() as i32);
+                    }
 
                     gl::BindVertexArray(0);
                     gl::BindTexture(gl::TEXTURE_2D, 0);
@@ -468,6 +490,27 @@ fn plane_vertices() -> Vec<Vertex> {
         Vertex {
             position: glm::vec3(5.0, -0.5, -5.0),
             tex_coord: glm::vec2(2.0, 2.0),
+        },
+    ]
+}
+
+fn quad_vertices() -> Vec<Vertex> {
+    vec![
+        Vertex {
+            position: glm::vec3(-0.5, -0.5, 0.0),
+            tex_coord: glm::vec2(0.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(0.5, -0.5, 0.0),
+            tex_coord: glm::vec2(1.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(-0.5, 0.5, 0.0),
+            tex_coord: glm::vec2(0.0, 1.0),
+        },
+        Vertex {
+            position: glm::vec3(0.5, 0.5, 0.0),
+            tex_coord: glm::vec2(1.0, 1.0),
         },
     ]
 }
