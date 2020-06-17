@@ -7,6 +7,7 @@ use std::ffi::c_void;
 use std::mem;
 use std::time::Instant;
 
+use gl::types::*;
 use glutin::{Api, ContextBuilder, GlProfile, GlRequest};
 use memoffset::offset_of;
 use nalgebra_glm as glm;
@@ -18,18 +19,21 @@ use winit::{
 };
 
 use camera::{Camera, CameraMotion};
+use framebuffer::Framebuffer;
 use shader_program::ShaderProgram;
 use texture::Texture;
 
 const VERTEX_SHADER: &str = include_str!("shaders/basic.vert");
 const FRAGMENT_SHADER: &str = include_str!("shaders/basic.frag");
 
+const SCREEN_VERTEX_SHADER: &str = include_str!("shaders/screen.vert");
+const SCREEN_FRAGMENT_SHADER: &str = include_str!("shaders/screen.frag");
+
 const MULTISAMPLING_SAMPLES: u16 = 4;
 
 fn main() {
     let event_loop = EventLoop::new();
     let monitor = event_loop.primary_monitor();
-    let monitor_size = monitor.size();
     let window_builder = WindowBuilder::new()
         .with_title("Learn OpenGL")
         .with_fullscreen(Some(Fullscreen::Borderless(monitor)));
@@ -43,6 +47,7 @@ fn main() {
     let context = unsafe { context.make_current().unwrap() };
     context.window().set_cursor_grab(true).unwrap();
     context.window().set_cursor_visible(false);
+    let mut window_size = context.window().inner_size();
 
     gl::load_with(|s| context.get_proc_address(s));
     unsafe {
@@ -57,19 +62,20 @@ fn main() {
 
     let cube_vertices = cube_vertices();
     let plane_vertices = plane_vertices();
-    let quad_vertices = quad_vertices();
+    let grass_quad_vertices = quad_vertices(0.5, 0.5);
+    let screen_quad_vertices = quad_vertices(1.0, 1.0);
 
-    let mut vaos = [0; 3];
-    let mut vbos = [0; 3];
+    let mut vaos = [0; 4];
+    let mut vbos = [0; 4];
     unsafe {
-        gl::GenVertexArrays(vaos.len() as i32, vaos.as_mut_ptr());
-        gl::GenBuffers(vbos.len() as i32, vbos.as_mut_ptr());
+        gl::GenVertexArrays(vaos.len() as GLint, vaos.as_mut_ptr());
+        gl::GenBuffers(vbos.len() as GLint, vbos.as_mut_ptr());
 
         gl::BindVertexArray(vaos[0]);
         gl::BindBuffer(gl::ARRAY_BUFFER, vbos[0]);
         gl::BufferData(
             gl::ARRAY_BUFFER,
-            (cube_vertices.len() * mem::size_of::<Vertex>()) as isize,
+            (cube_vertices.len() * mem::size_of::<Vertex>()) as GLsizeiptr,
             cube_vertices.as_ptr() as *const c_void,
             gl::STATIC_DRAW,
         );
@@ -78,7 +84,7 @@ fn main() {
             3,
             gl::FLOAT,
             gl::FALSE,
-            mem::size_of::<Vertex>() as i32,
+            mem::size_of::<Vertex>() as GLint,
             offset_of!(Vertex, position) as *const c_void,
         );
         gl::EnableVertexAttribArray(0);
@@ -87,7 +93,7 @@ fn main() {
             2,
             gl::FLOAT,
             gl::FALSE,
-            mem::size_of::<Vertex>() as i32,
+            mem::size_of::<Vertex>() as GLint,
             offset_of!(Vertex, tex_coord) as *const c_void,
         );
         gl::EnableVertexAttribArray(1);
@@ -96,7 +102,7 @@ fn main() {
         gl::BindBuffer(gl::ARRAY_BUFFER, vbos[1]);
         gl::BufferData(
             gl::ARRAY_BUFFER,
-            (plane_vertices.len() * mem::size_of::<Vertex>()) as isize,
+            (plane_vertices.len() * mem::size_of::<Vertex>()) as GLsizeiptr,
             plane_vertices.as_ptr() as *const c_void,
             gl::STATIC_DRAW,
         );
@@ -105,7 +111,7 @@ fn main() {
             3,
             gl::FLOAT,
             gl::FALSE,
-            mem::size_of::<Vertex>() as i32,
+            mem::size_of::<Vertex>() as GLint,
             offset_of!(Vertex, position) as *const c_void,
         );
         gl::EnableVertexAttribArray(0);
@@ -114,7 +120,7 @@ fn main() {
             2,
             gl::FLOAT,
             gl::FALSE,
-            mem::size_of::<Vertex>() as i32,
+            mem::size_of::<Vertex>() as GLint,
             offset_of!(Vertex, tex_coord) as *const c_void,
         );
         gl::EnableVertexAttribArray(1);
@@ -123,8 +129,8 @@ fn main() {
         gl::BindBuffer(gl::ARRAY_BUFFER, vbos[2]);
         gl::BufferData(
             gl::ARRAY_BUFFER,
-            (quad_vertices.len() * mem::size_of::<Vertex>()) as isize,
-            quad_vertices.as_ptr() as *const c_void,
+            (grass_quad_vertices.len() * mem::size_of::<Vertex>()) as GLsizeiptr,
+            grass_quad_vertices.as_ptr() as *const c_void,
             gl::STATIC_DRAW,
         );
         gl::VertexAttribPointer(
@@ -132,7 +138,7 @@ fn main() {
             3,
             gl::FLOAT,
             gl::FALSE,
-            mem::size_of::<Vertex>() as i32,
+            mem::size_of::<Vertex>() as GLint,
             offset_of!(Vertex, position) as *const c_void,
         );
         gl::EnableVertexAttribArray(0);
@@ -141,7 +147,34 @@ fn main() {
             2,
             gl::FLOAT,
             gl::FALSE,
-            mem::size_of::<Vertex>() as i32,
+            mem::size_of::<Vertex>() as GLint,
+            offset_of!(Vertex, tex_coord) as *const c_void,
+        );
+        gl::EnableVertexAttribArray(1);
+
+        gl::BindVertexArray(vaos[3]);
+        gl::BindBuffer(gl::ARRAY_BUFFER, vbos[3]);
+        gl::BufferData(
+            gl::ARRAY_BUFFER,
+            (screen_quad_vertices.len() * mem::size_of::<Vertex>()) as GLsizeiptr,
+            screen_quad_vertices.as_ptr() as *const c_void,
+            gl::STATIC_DRAW,
+        );
+        gl::VertexAttribPointer(
+            0,
+            3,
+            gl::FLOAT,
+            gl::FALSE,
+            mem::size_of::<Vertex>() as GLint,
+            offset_of!(Vertex, position) as *const c_void,
+        );
+        gl::EnableVertexAttribArray(0);
+        gl::VertexAttribPointer(
+            1,
+            2,
+            gl::FLOAT,
+            gl::FALSE,
+            mem::size_of::<Vertex>() as GLint,
             offset_of!(Vertex, tex_coord) as *const c_void,
         );
         gl::EnableVertexAttribArray(1);
@@ -154,12 +187,21 @@ fn main() {
         basic_shader.use_program();
         basic_shader.set_uniform_int("tex", 0);
     }
-    let cube_texture = unsafe { Texture::load("resources/textures/marble.jpg").unwrap() };
+
+    let screen_shader = ShaderProgram::new(SCREEN_VERTEX_SHADER, SCREEN_FRAGMENT_SHADER).unwrap();
+    unsafe {
+        screen_shader.use_program();
+        screen_shader.set_uniform_int("tex", 0);
+    }
+
+    let cube_texture = unsafe { Texture::load("resources/textures/container.jpg").unwrap() };
     let plane_texture = unsafe { Texture::load("resources/textures/metal.png").unwrap() };
     let window_texture = unsafe { Texture::load("resources/textures/window.png").unwrap() };
     unsafe {
         window_texture.set_wrap(gl::CLAMP_TO_EDGE, gl::CLAMP_TO_EDGE);
     }
+
+    let framebuffer = Framebuffer::new(window_size);
 
     let mut prev_frame_time = Instant::now();
     let mut delta_time = 0.0f32;
@@ -174,16 +216,16 @@ fn main() {
         0.0,
     );
     let mut window_is_focused = true;
-    let mut aspect_ratio = monitor_size.width as f64 / monitor_size.height as f64;
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
         match event {
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                WindowEvent::Resized(window_size) => {
-                    aspect_ratio = window_size.width as f64 / window_size.height as f64;
+                WindowEvent::Resized(size) => {
+                    window_size = size;
+                    framebuffer.resize(size);
                     unsafe {
-                        gl::Viewport(0, 0, window_size.width as i32, window_size.height as i32);
+                        gl::Viewport(0, 0, size.width as GLint, size.height as GLint);
                     }
                 }
                 WindowEvent::KeyboardInput { input, .. } => match input.state {
@@ -251,12 +293,14 @@ fn main() {
                 scroll_delta = 0.0;
 
                 unsafe {
+                    framebuffer.bind();
                     gl::ClearColor(0.1, 0.1, 0.1, 1.0);
-                    gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT | gl::STENCIL_BUFFER_BIT);
+                    gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+                    gl::Enable(gl::DEPTH_TEST);
 
                     let view = camera.view_matrix();
                     let projection = glm::perspective(
-                        aspect_ratio as f32,
+                        window_size.width as f32 / window_size.height as f32,
                         camera.fov().to_radians(),
                         0.1,
                         100.0,
@@ -274,14 +318,14 @@ fn main() {
                     for p in cube_positions.iter() {
                         let model = glm::translate(&glm::Mat4::identity(), p);
                         basic_shader.set_uniform_mat4f("model", model);
-                        gl::DrawArrays(gl::TRIANGLES, 0, cube_vertices.len() as i32);
+                        gl::DrawArrays(gl::TRIANGLES, 0, cube_vertices.len() as GLint);
                     }
                     gl::Disable(gl::CULL_FACE);
 
                     gl::BindVertexArray(vaos[1]);
                     gl::BindTexture(gl::TEXTURE_2D, plane_texture.id());
                     basic_shader.set_uniform_mat4f("model", glm::Mat4::identity());
-                    gl::DrawArrays(gl::TRIANGLES, 0, plane_vertices.len() as i32);
+                    gl::DrawArrays(gl::TRIANGLES, 0, plane_vertices.len() as GLint);
 
                     gl::BindVertexArray(vaos[2]);
                     gl::BindTexture(gl::TEXTURE_2D, window_texture.id());
@@ -299,17 +343,152 @@ fn main() {
                     for p in positions.iter().rev() {
                         let model = glm::translate(&glm::Mat4::identity(), p);
                         basic_shader.set_uniform_mat4f("model", model);
-                        gl::DrawArrays(gl::TRIANGLE_STRIP, 0, quad_vertices.len() as i32);
+                        gl::DrawArrays(gl::TRIANGLE_STRIP, 0, grass_quad_vertices.len() as GLint);
                     }
+
+                    gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+                    gl::ClearColor(1.0, 1.0, 1.0, 1.0);
+                    gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+                    gl::Disable(gl::DEPTH_TEST);
+
+                    screen_shader.use_program();
+                    gl::BindVertexArray(vaos[3]);
+                    gl::BindTexture(gl::TEXTURE_2D, framebuffer.texture());
+                    gl::DrawArrays(gl::TRIANGLE_STRIP, 0, screen_quad_vertices.len() as GLint);
 
                     gl::BindVertexArray(0);
                     gl::BindTexture(gl::TEXTURE_2D, 0);
                 }
                 context.swap_buffers().unwrap();
             }
+            Event::LoopDestroyed => unsafe {
+                gl::DeleteVertexArrays(vaos.len() as GLint, vaos.as_ptr());
+                gl::DeleteBuffers(vbos.len() as GLint, vbos.as_ptr());
+            },
             _ => {}
         }
     });
+}
+
+mod framebuffer {
+    use std::ptr;
+
+    use gl::types::*;
+    use winit::dpi::PhysicalSize;
+
+    pub struct Framebuffer {
+        id: GLuint,
+        texture: GLuint,
+        render_buffer: GLuint,
+    }
+
+    impl Framebuffer {
+        pub fn new(size: PhysicalSize<u32>) -> Self {
+            let mut s = Self {
+                id: 0,
+                texture: 0,
+                render_buffer: 0,
+            };
+            unsafe {
+                gl::GenFramebuffers(1, &mut s.id);
+                gl::GenTextures(1, &mut s.texture);
+                gl::GenRenderbuffers(1, &mut s.render_buffer);
+
+                gl::BindFramebuffer(gl::FRAMEBUFFER, s.id);
+                gl::BindTexture(gl::TEXTURE_2D, s.texture);
+                gl::TexImage2D(
+                    gl::TEXTURE_2D,
+                    0,
+                    gl::RGB8 as GLint,
+                    size.width as GLint,
+                    size.height as GLint,
+                    0,
+                    gl::RGB,
+                    gl::UNSIGNED_BYTE,
+                    ptr::null(),
+                );
+                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as GLint);
+                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as GLint);
+                gl::BindTexture(gl::TEXTURE_2D, 0);
+                gl::FramebufferTexture2D(
+                    gl::FRAMEBUFFER,
+                    gl::COLOR_ATTACHMENT0,
+                    gl::TEXTURE_2D,
+                    s.texture,
+                    0,
+                );
+
+                gl::BindRenderbuffer(gl::RENDERBUFFER, s.render_buffer);
+                gl::RenderbufferStorage(
+                    gl::RENDERBUFFER,
+                    gl::DEPTH24_STENCIL8,
+                    size.width as GLint,
+                    size.height as GLint,
+                );
+                gl::BindRenderbuffer(gl::RENDERBUFFER, 0);
+                gl::FramebufferRenderbuffer(
+                    gl::FRAMEBUFFER,
+                    gl::DEPTH_STENCIL_ATTACHMENT,
+                    gl::RENDERBUFFER,
+                    s.render_buffer,
+                );
+
+                if gl::CheckFramebufferStatus(gl::FRAMEBUFFER) != gl::FRAMEBUFFER_COMPLETE {
+                    panic!("Framebuffer initialization failed");
+                }
+                gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+            }
+
+            s
+        }
+
+        pub fn bind(&self) {
+            unsafe {
+                gl::BindFramebuffer(gl::FRAMEBUFFER, self.id);
+            }
+        }
+
+        pub fn resize(&self, size: PhysicalSize<u32>) {
+            unsafe {
+                gl::BindTexture(gl::TEXTURE_2D, self.texture);
+                gl::TexImage2D(
+                    gl::TEXTURE_2D,
+                    0,
+                    gl::RGB8 as GLint,
+                    size.width as GLint,
+                    size.height as GLint,
+                    0,
+                    gl::RGB,
+                    gl::UNSIGNED_BYTE,
+                    ptr::null(),
+                );
+                gl::BindTexture(gl::TEXTURE_2D, 0);
+
+                gl::BindRenderbuffer(gl::RENDERBUFFER, self.render_buffer);
+                gl::RenderbufferStorage(
+                    gl::RENDERBUFFER,
+                    gl::DEPTH24_STENCIL8,
+                    size.width as GLint,
+                    size.height as GLint,
+                );
+                gl::BindRenderbuffer(gl::RENDERBUFFER, 0);
+            }
+        }
+
+        pub fn texture(&self) -> GLuint {
+            self.texture
+        }
+    }
+
+    impl Drop for Framebuffer {
+        fn drop(&mut self) {
+            unsafe {
+                gl::DeleteTextures(1, &self.texture);
+                gl::DeleteRenderbuffers(1, &self.render_buffer);
+                gl::DeleteFramebuffers(1, &self.id);
+            }
+        }
+    }
 }
 
 #[repr(C, packed)]
@@ -373,102 +552,102 @@ fn cube_vertices() -> Vec<Vertex> {
         // left
         Vertex {
             position: glm::vec3(-0.5, -0.5, -0.5),
-            tex_coord: glm::vec2(0.0, 0.0),
+            tex_coord: glm::vec2(0.0, 1.0),
         },
         Vertex {
             position: glm::vec3(-0.5, 0.5, 0.5),
-            tex_coord: glm::vec2(1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(-0.5, 0.5, -0.5),
             tex_coord: glm::vec2(1.0, 0.0),
         },
         Vertex {
-            position: glm::vec3(-0.5, 0.5, 0.5),
+            position: glm::vec3(-0.5, 0.5, -0.5),
             tex_coord: glm::vec2(1.0, 1.0),
         },
         Vertex {
+            position: glm::vec3(-0.5, 0.5, 0.5),
+            tex_coord: glm::vec2(1.0, 0.0),
+        },
+        Vertex {
             position: glm::vec3(-0.5, -0.5, -0.5),
-            tex_coord: glm::vec2(0.0, 0.0),
+            tex_coord: glm::vec2(0.0, 1.0),
         },
         Vertex {
             position: glm::vec3(-0.5, -0.5, 0.5),
-            tex_coord: glm::vec2(0.0, 1.0),
+            tex_coord: glm::vec2(0.0, 0.0),
         },
         // right
         Vertex {
             position: glm::vec3(0.5, -0.5, -0.5),
-            tex_coord: glm::vec2(0.0, 0.0),
+            tex_coord: glm::vec2(0.0, 1.0),
         },
         Vertex {
             position: glm::vec3(0.5, 0.5, -0.5),
+            tex_coord: glm::vec2(1.0, 1.0),
+        },
+        Vertex {
+            position: glm::vec3(0.5, 0.5, 0.5),
             tex_coord: glm::vec2(1.0, 0.0),
         },
         Vertex {
             position: glm::vec3(0.5, 0.5, 0.5),
-            tex_coord: glm::vec2(1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(0.5, 0.5, 0.5),
-            tex_coord: glm::vec2(1.0, 1.0),
+            tex_coord: glm::vec2(1.0, 0.0),
         },
         Vertex {
             position: glm::vec3(0.5, -0.5, 0.5),
-            tex_coord: glm::vec2(0.0, 1.0),
+            tex_coord: glm::vec2(0.0, 0.0),
         },
         Vertex {
             position: glm::vec3(0.5, -0.5, -0.5),
-            tex_coord: glm::vec2(0.0, 0.0),
+            tex_coord: glm::vec2(0.0, 1.0),
         },
         // bottom
         Vertex {
             position: glm::vec3(-0.5, -0.5, -0.5),
-            tex_coord: glm::vec2(0.0, 0.0),
+            tex_coord: glm::vec2(0.0, 1.0),
         },
         Vertex {
             position: glm::vec3(0.5, -0.5, -0.5),
+            tex_coord: glm::vec2(1.0, 1.0),
+        },
+        Vertex {
+            position: glm::vec3(0.5, -0.5, 0.5),
             tex_coord: glm::vec2(1.0, 0.0),
         },
         Vertex {
             position: glm::vec3(0.5, -0.5, 0.5),
-            tex_coord: glm::vec2(1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(0.5, -0.5, 0.5),
-            tex_coord: glm::vec2(1.0, 1.0),
+            tex_coord: glm::vec2(1.0, 0.0),
         },
         Vertex {
             position: glm::vec3(-0.5, -0.5, 0.5),
-            tex_coord: glm::vec2(0.0, 1.0),
+            tex_coord: glm::vec2(0.0, 0.0),
         },
         Vertex {
             position: glm::vec3(-0.5, -0.5, -0.5),
-            tex_coord: glm::vec2(0.0, 0.0),
+            tex_coord: glm::vec2(0.0, 1.0),
         },
         // top
         Vertex {
             position: glm::vec3(-0.5, 0.5, -0.5),
-            tex_coord: glm::vec2(0.0, 0.0),
+            tex_coord: glm::vec2(0.0, 1.0),
         },
         Vertex {
             position: glm::vec3(0.5, 0.5, 0.5),
-            tex_coord: glm::vec2(1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(0.5, 0.5, -0.5),
             tex_coord: glm::vec2(1.0, 0.0),
         },
         Vertex {
-            position: glm::vec3(0.5, 0.5, 0.5),
+            position: glm::vec3(0.5, 0.5, -0.5),
             tex_coord: glm::vec2(1.0, 1.0),
         },
         Vertex {
+            position: glm::vec3(0.5, 0.5, 0.5),
+            tex_coord: glm::vec2(1.0, 0.0),
+        },
+        Vertex {
             position: glm::vec3(-0.5, 0.5, -0.5),
-            tex_coord: glm::vec2(0.0, 0.0),
+            tex_coord: glm::vec2(0.0, 1.0),
         },
         Vertex {
             position: glm::vec3(-0.5, 0.5, 0.5),
-            tex_coord: glm::vec2(0.0, 1.0),
+            tex_coord: glm::vec2(0.0, 0.0),
         },
     ]
 }
@@ -502,22 +681,22 @@ fn plane_vertices() -> Vec<Vertex> {
     ]
 }
 
-fn quad_vertices() -> Vec<Vertex> {
+fn quad_vertices(x_size: f32, y_size: f32) -> Vec<Vertex> {
     vec![
         Vertex {
-            position: glm::vec3(-0.5, -0.5, 0.0),
+            position: glm::vec3(-x_size, -y_size, 0.0),
             tex_coord: glm::vec2(0.0, 0.0),
         },
         Vertex {
-            position: glm::vec3(0.5, -0.5, 0.0),
+            position: glm::vec3(x_size, -y_size, 0.0),
             tex_coord: glm::vec2(1.0, 0.0),
         },
         Vertex {
-            position: glm::vec3(-0.5, 0.5, 0.0),
+            position: glm::vec3(-x_size, y_size, 0.0),
             tex_coord: glm::vec2(0.0, 1.0),
         },
         Vertex {
-            position: glm::vec3(0.5, 0.5, 0.0),
+            position: glm::vec3(x_size, y_size, 0.0),
             tex_coord: glm::vec2(1.0, 1.0),
         },
     ]
