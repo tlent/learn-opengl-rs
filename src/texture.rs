@@ -55,8 +55,8 @@ impl Texture {
         gl::BindTexture(gl::TEXTURE_2D, 0);
     }
 
-    pub fn id(&self) -> u32 {
-        self.id
+    pub unsafe fn bind(&self) {
+        gl::BindTexture(gl::TEXTURE_2D, self.id);
     }
 }
 

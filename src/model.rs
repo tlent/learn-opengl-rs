@@ -183,7 +183,7 @@ impl Mesh {
             let name = &format!("material.texture_diffuse[{}]", diffuse_num);
             shader.set_uniform_int(name, texture_num as i32);
             gl::ActiveTexture(gl::TEXTURE0 + texture_num as u32);
-            gl::BindTexture(gl::TEXTURE_2D, texture.id());
+            texture.bind();
             texture_num += 1;
         }
         let specular_textures = self.specular_textures.iter().enumerate();
@@ -191,7 +191,7 @@ impl Mesh {
             let name = &format!("material.texture_specular[{}]", specular_num);
             shader.set_uniform_int(name, texture_num as i32);
             gl::ActiveTexture(gl::TEXTURE0 + texture_num as u32);
-            gl::BindTexture(gl::TEXTURE_2D, texture.id());
+            texture.bind();
             texture_num += 1;
         }
         gl::ActiveTexture(gl::TEXTURE0);
