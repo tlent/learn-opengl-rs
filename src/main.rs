@@ -25,6 +25,9 @@ use texture::Texture;
 const VERTEX_SHADER: &str = include_str!("shaders/basic.vert");
 const FRAGMENT_SHADER: &str = include_str!("shaders/basic.frag");
 
+const ENVMAP_VERTEX_SHADER: &str = include_str!("shaders/envmap.vert");
+const ENVMAP_FRAGMENT_SHADER: &str = include_str!("shaders/envmap.frag");
+
 const SKYBOX_VERTEX_SHADER: &str = include_str!("shaders/skybox.vert");
 const SKYBOX_FRAGMENT_SHADER: &str = include_str!("shaders/skybox.frag");
 
@@ -57,7 +60,7 @@ fn main() {
         context.swap_buffers().unwrap();
     }
 
-    let cube_vertices = cube_vertices();
+    let cube_vertices = cube_normal_vertices();
     let skybox_vertices = skybox_vertices();
 
     let mut vaos = [0; 2];
@@ -70,7 +73,7 @@ fn main() {
         gl::BindBuffer(gl::ARRAY_BUFFER, vbos[0]);
         gl::BufferData(
             gl::ARRAY_BUFFER,
-            (cube_vertices.len() * mem::size_of::<TexVertex>()) as GLsizeiptr,
+            (cube_vertices.len() * mem::size_of::<NormalVertex>()) as GLsizeiptr,
             cube_vertices.as_ptr() as *const c_void,
             gl::STATIC_DRAW,
         );
@@ -79,17 +82,17 @@ fn main() {
             3,
             gl::FLOAT,
             gl::FALSE,
-            mem::size_of::<TexVertex>() as GLsizei,
-            offset_of!(TexVertex, position) as *const c_void,
+            mem::size_of::<NormalVertex>() as GLsizei,
+            offset_of!(NormalVertex, position) as *const c_void,
         );
         gl::EnableVertexAttribArray(0);
         gl::VertexAttribPointer(
             1,
-            2,
+            3,
             gl::FLOAT,
             gl::FALSE,
-            mem::size_of::<TexVertex>() as GLsizei,
-            offset_of!(TexVertex, tex_coord) as *const c_void,
+            mem::size_of::<NormalVertex>() as GLsizei,
+            offset_of!(NormalVertex, normal) as *const c_void,
         );
         gl::EnableVertexAttribArray(1);
 
@@ -97,7 +100,7 @@ fn main() {
         gl::BindBuffer(gl::ARRAY_BUFFER, vbos[1]);
         gl::BufferData(
             gl::ARRAY_BUFFER,
-            (skybox_vertices.len() * mem::size_of::<TexVertex>()) as GLsizeiptr,
+            (skybox_vertices.len() * mem::size_of::<Vertex>()) as GLsizeiptr,
             skybox_vertices.as_ptr() as *const c_void,
             gl::STATIC_DRAW,
         );
@@ -112,11 +115,10 @@ fn main() {
         gl::EnableVertexAttribArray(0);
     }
 
-    let cube_texture = unsafe { Texture::load("resources/textures/container.jpg").unwrap() };
-    let basic_shader = ShaderProgram::new(VERTEX_SHADER, FRAGMENT_SHADER).unwrap();
+    let envmap_shader = ShaderProgram::new(ENVMAP_VERTEX_SHADER, ENVMAP_FRAGMENT_SHADER).unwrap();
     unsafe {
-        basic_shader.use_program();
-        basic_shader.set_uniform_int("tex", 0);
+        envmap_shader.use_program();
+        envmap_shader.set_uniform_int("skybox", 0);
     }
 
     let skybox_faces: Vec<_> = ["right", "left", "top", "bottom", "front", "back"]
@@ -278,16 +280,18 @@ fn main() {
                         100.0,
                     );
 
-                    basic_shader.use_program();
-                    basic_shader.set_uniform_mat4f("view", view);
-                    basic_shader.set_uniform_mat4f("projection", projection);
+                    gl::ActiveTexture(gl::TEXTURE0);
+                    gl::BindTexture(gl::TEXTURE_CUBE_MAP, skybox_texture);
+
+                    envmap_shader.use_program();
+                    envmap_shader.set_uniform_mat4f("view", view);
+                    envmap_shader.set_uniform_mat4f("projection", projection);
+                    envmap_shader.set_uniform_vec3f("viewPos", camera.position());
 
                     gl::Enable(gl::CULL_FACE);
                     gl::BindVertexArray(vaos[0]);
-                    gl::ActiveTexture(gl::TEXTURE0);
-                    cube_texture.bind();
                     let model = glm::Mat4::identity();
-                    basic_shader.set_uniform_mat4f("model", model);
+                    envmap_shader.set_uniform_mat4f("model", model);
                     gl::DrawArrays(gl::TRIANGLES, 0, cube_vertices.len() as GLint);
                     gl::Disable(gl::CULL_FACE);
 
@@ -299,8 +303,6 @@ fn main() {
 
                     gl::DepthFunc(gl::LEQUAL);
                     gl::BindVertexArray(vaos[1]);
-                    gl::ActiveTexture(gl::TEXTURE0);
-                    gl::BindTexture(gl::TEXTURE_CUBE_MAP, skybox_texture);
                     gl::DrawArrays(gl::TRIANGLES, 0, skybox_vertices.len() as GLsizei);
 
                     gl::DepthFunc(gl::LESS);
@@ -432,6 +434,167 @@ fn skybox_vertices() -> Vec<Vertex> {
         },
         Vertex {
             position: glm::vec3(1.0, -1.0, 1.0),
+        },
+    ]
+}
+
+#[repr(C, packed)]
+struct NormalVertex {
+    position: glm::Vec3,
+    normal: glm::Vec3,
+}
+
+fn cube_normal_vertices() -> Vec<NormalVertex> {
+    vec![
+        // back
+        NormalVertex {
+            position: glm::vec3(-0.5, -0.5, -0.5),
+            normal: glm::vec3(0.0, 0.0, -1.0),
+        },
+        NormalVertex {
+            position: glm::vec3(0.5, 0.5, -0.5),
+            normal: glm::vec3(0.0, 0.0, -1.0),
+        },
+        NormalVertex {
+            position: glm::vec3(0.5, -0.5, -0.5),
+            normal: glm::vec3(0.0, 0.0, -1.0),
+        },
+        NormalVertex {
+            position: glm::vec3(0.5, 0.5, -0.5),
+            normal: glm::vec3(0.0, 0.0, -1.0),
+        },
+        NormalVertex {
+            position: glm::vec3(-0.5, -0.5, -0.5),
+            normal: glm::vec3(0.0, 0.0, -1.0),
+        },
+        NormalVertex {
+            position: glm::vec3(-0.5, 0.5, -0.5),
+            normal: glm::vec3(0.0, 0.0, -1.0),
+        },
+        // front
+        NormalVertex {
+            position: glm::vec3(-0.5, -0.5, 0.5),
+            normal: glm::vec3(0.0, 0.0, 1.0),
+        },
+        NormalVertex {
+            position: glm::vec3(0.5, -0.5, 0.5),
+            normal: glm::vec3(0.0, 0.0, 1.0),
+        },
+        NormalVertex {
+            position: glm::vec3(0.5, 0.5, 0.5),
+            normal: glm::vec3(0.0, 0.0, 1.0),
+        },
+        NormalVertex {
+            position: glm::vec3(0.5, 0.5, 0.5),
+            normal: glm::vec3(0.0, 0.0, 1.0),
+        },
+        NormalVertex {
+            position: glm::vec3(-0.5, 0.5, 0.5),
+            normal: glm::vec3(0.0, 0.0, 1.0),
+        },
+        NormalVertex {
+            position: glm::vec3(-0.5, -0.5, 0.5),
+            normal: glm::vec3(0.0, 0.0, 1.0),
+        },
+        // left
+        NormalVertex {
+            position: glm::vec3(-0.5, 0.5, 0.5),
+            normal: glm::vec3(-1.0, 0.0, 0.0),
+        },
+        NormalVertex {
+            position: glm::vec3(-0.5, 0.5, -0.5),
+            normal: glm::vec3(-1.0, 0.0, 0.0),
+        },
+        NormalVertex {
+            position: glm::vec3(-0.5, -0.5, -0.5),
+            normal: glm::vec3(-1.0, 0.0, 0.0),
+        },
+        NormalVertex {
+            position: glm::vec3(-0.5, -0.5, -0.5),
+            normal: glm::vec3(-1.0, 0.0, 0.0),
+        },
+        NormalVertex {
+            position: glm::vec3(-0.5, -0.5, 0.5),
+            normal: glm::vec3(-1.0, 0.0, 0.0),
+        },
+        NormalVertex {
+            position: glm::vec3(-0.5, 0.5, 0.5),
+            normal: glm::vec3(-1.0, 0.0, 0.0),
+        },
+        // right
+        NormalVertex {
+            position: glm::vec3(0.5, 0.5, 0.5),
+            normal: glm::vec3(1.0, 0.0, 0.0),
+        },
+        NormalVertex {
+            position: glm::vec3(0.5, -0.5, -0.5),
+            normal: glm::vec3(1.0, 0.0, 0.0),
+        },
+        NormalVertex {
+            position: glm::vec3(0.5, 0.5, -0.5),
+            normal: glm::vec3(1.0, 0.0, 0.0),
+        },
+        NormalVertex {
+            position: glm::vec3(0.5, -0.5, -0.5),
+            normal: glm::vec3(1.0, 0.0, 0.0),
+        },
+        NormalVertex {
+            position: glm::vec3(0.5, 0.5, 0.5),
+            normal: glm::vec3(1.0, 0.0, 0.0),
+        },
+        NormalVertex {
+            position: glm::vec3(0.5, -0.5, 0.5),
+            normal: glm::vec3(1.0, 0.0, 0.0),
+        },
+        // bottom
+        NormalVertex {
+            position: glm::vec3(-0.5, -0.5, -0.5),
+            normal: glm::vec3(0.0, -1.0, 0.0),
+        },
+        NormalVertex {
+            position: glm::vec3(0.5, -0.5, -0.5),
+            normal: glm::vec3(0.0, -1.0, 0.0),
+        },
+        NormalVertex {
+            position: glm::vec3(0.5, -0.5, 0.5),
+            normal: glm::vec3(0.0, -1.0, 0.0),
+        },
+        NormalVertex {
+            position: glm::vec3(0.5, -0.5, 0.5),
+            normal: glm::vec3(0.0, -1.0, 0.0),
+        },
+        NormalVertex {
+            position: glm::vec3(-0.5, -0.5, 0.5),
+            normal: glm::vec3(0.0, -1.0, 0.0),
+        },
+        NormalVertex {
+            position: glm::vec3(-0.5, -0.5, -0.5),
+            normal: glm::vec3(0.0, -1.0, 0.0),
+        },
+        // top
+        NormalVertex {
+            position: glm::vec3(-0.5, 0.5, -0.5),
+            normal: glm::vec3(0.0, 1.0, 0.0),
+        },
+        NormalVertex {
+            position: glm::vec3(0.5, 0.5, 0.5),
+            normal: glm::vec3(0.0, 1.0, 0.0),
+        },
+        NormalVertex {
+            position: glm::vec3(0.5, 0.5, -0.5),
+            normal: glm::vec3(0.0, 1.0, 0.0),
+        },
+        NormalVertex {
+            position: glm::vec3(0.5, 0.5, 0.5),
+            normal: glm::vec3(0.0, 1.0, 0.0),
+        },
+        NormalVertex {
+            position: glm::vec3(-0.5, 0.5, -0.5),
+            normal: glm::vec3(0.0, 1.0, 0.0),
+        },
+        NormalVertex {
+            position: glm::vec3(-0.5, 0.5, 0.5),
+            normal: glm::vec3(0.0, 1.0, 0.0),
         },
     ]
 }
