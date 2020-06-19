@@ -11,12 +11,20 @@ pub struct ShaderProgram {
 }
 
 impl ShaderProgram {
-    pub fn new(vertex_shader: &str, fragment_shader: &str) -> Result<Self> {
+    pub fn new(
+        vertex_shader: &str,
+        fragment_shader: &str,
+        geometry_shader: Option<&str>,
+    ) -> Result<Self> {
+        let mut sources = vec![
+            (gl::VERTEX_SHADER, vertex_shader),
+            (gl::FRAGMENT_SHADER, fragment_shader),
+        ];
+        if let Some(g) = geometry_shader {
+            sources.push((gl::GEOMETRY_SHADER, g));
+        }
         let mut shaders = vec![];
-        for &(s, t) in &[
-            (vertex_shader, gl::VERTEX_SHADER),
-            (fragment_shader, gl::FRAGMENT_SHADER),
-        ] {
+        for &(t, s) in sources.iter() {
             let id = unsafe { gl::CreateShader(t) };
             let source = CString::new(s).unwrap();
             unsafe {

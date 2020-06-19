@@ -9,7 +9,6 @@ use std::time::Instant;
 
 use gl::types::*;
 use glutin::{Api, ContextBuilder, GlProfile, GlRequest};
-use image::GenericImageView;
 use memoffset::offset_of;
 use nalgebra_glm as glm;
 use winit::{
@@ -20,16 +19,10 @@ use winit::{
 
 use camera::{Camera, CameraMotion};
 use shader_program::ShaderProgram;
-use texture::Texture;
 
 const VERTEX_SHADER: &str = include_str!("shaders/basic.vert");
 const FRAGMENT_SHADER: &str = include_str!("shaders/basic.frag");
-
-const ENVMAP_VERTEX_SHADER: &str = include_str!("shaders/envmap.vert");
-const ENVMAP_FRAGMENT_SHADER: &str = include_str!("shaders/envmap.frag");
-
-const SKYBOX_VERTEX_SHADER: &str = include_str!("shaders/skybox.vert");
-const SKYBOX_FRAGMENT_SHADER: &str = include_str!("shaders/skybox.frag");
+const GEOMETRY_SHADER: &str = include_str!("shaders/basic.geom");
 
 const MULTISAMPLING_SAMPLES: u16 = 4;
 
@@ -60,11 +53,27 @@ fn main() {
         context.swap_buffers().unwrap();
     }
 
-    let cube_vertices = cube_normal_vertices();
-    let skybox_vertices = skybox_vertices();
+    let points = [
+        Vertex {
+            position: glm::vec2(0.5, 0.5),
+            color: glm::vec3(1.0, 0.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec2(0.5, -0.5),
+            color: glm::vec3(0.0, 1.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec2(-0.5, -0.5),
+            color: glm::vec3(0.0, 0.0, 1.0),
+        },
+        Vertex {
+            position: glm::vec2(-0.5, 0.5),
+            color: glm::vec3(1.0, 1.0, 0.0),
+        },
+    ];
 
-    let mut vaos = [0; 2];
-    let mut vbos = [0; 2];
+    let mut vaos = [0; 1];
+    let mut vbos = [0; 1];
     unsafe {
         gl::GenVertexArrays(vaos.len() as GLsizei, vaos.as_mut_ptr());
         gl::GenBuffers(vbos.len() as GLsizei, vbos.as_mut_ptr());
@@ -73,17 +82,17 @@ fn main() {
         gl::BindBuffer(gl::ARRAY_BUFFER, vbos[0]);
         gl::BufferData(
             gl::ARRAY_BUFFER,
-            (cube_vertices.len() * mem::size_of::<NormalVertex>()) as GLsizeiptr,
-            cube_vertices.as_ptr() as *const c_void,
+            (points.len() * mem::size_of::<Vertex>()) as GLsizeiptr,
+            points.as_ptr() as *const c_void,
             gl::STATIC_DRAW,
         );
         gl::VertexAttribPointer(
             0,
-            3,
+            2,
             gl::FLOAT,
             gl::FALSE,
-            mem::size_of::<NormalVertex>() as GLsizei,
-            offset_of!(NormalVertex, position) as *const c_void,
+            mem::size_of::<Vertex>() as GLsizei,
+            offset_of!(Vertex, position) as *const c_void,
         );
         gl::EnableVertexAttribArray(0);
         gl::VertexAttribPointer(
@@ -91,94 +100,14 @@ fn main() {
             3,
             gl::FLOAT,
             gl::FALSE,
-            mem::size_of::<NormalVertex>() as GLsizei,
-            offset_of!(NormalVertex, normal) as *const c_void,
+            mem::size_of::<Vertex>() as GLsizei,
+            offset_of!(Vertex, color) as *const c_void,
         );
         gl::EnableVertexAttribArray(1);
-
-        gl::BindVertexArray(vaos[1]);
-        gl::BindBuffer(gl::ARRAY_BUFFER, vbos[1]);
-        gl::BufferData(
-            gl::ARRAY_BUFFER,
-            (skybox_vertices.len() * mem::size_of::<Vertex>()) as GLsizeiptr,
-            skybox_vertices.as_ptr() as *const c_void,
-            gl::STATIC_DRAW,
-        );
-        gl::VertexAttribPointer(
-            0,
-            3,
-            gl::FLOAT,
-            gl::FALSE,
-            mem::size_of::<Vertex>() as GLsizei,
-            offset_of!(Vertex, position) as *const c_void,
-        );
-        gl::EnableVertexAttribArray(0);
     }
 
-    let envmap_shader = ShaderProgram::new(ENVMAP_VERTEX_SHADER, ENVMAP_FRAGMENT_SHADER).unwrap();
-    unsafe {
-        envmap_shader.use_program();
-        envmap_shader.set_uniform_int("skybox", 0);
-    }
-
-    let skybox_faces: Vec<_> = ["right", "left", "top", "bottom", "front", "back"]
-        .iter()
-        .map(|f| format!("resources/textures/skybox/{}.jpg", f))
-        .collect();
-    let mut skybox_texture = 0;
-    unsafe {
-        gl::GenTextures(1, &mut skybox_texture);
-        gl::BindTexture(gl::TEXTURE_CUBE_MAP, skybox_texture);
-
-        for (i, face) in skybox_faces.iter().enumerate() {
-            let image = image::open(face).unwrap();
-            let (width, height) = image.dimensions();
-            let data = image.into_rgba().into_raw();
-            let target = gl::TEXTURE_CUBE_MAP_POSITIVE_X + i as GLenum;
-            gl::TexImage2D(
-                target,
-                0,
-                gl::RGBA8 as GLint,
-                width as GLsizei,
-                height as GLsizei,
-                0,
-                gl::RGBA,
-                gl::UNSIGNED_BYTE,
-                data.as_ptr() as *const c_void,
-            );
-        }
-
-        gl::TexParameteri(
-            gl::TEXTURE_CUBE_MAP,
-            gl::TEXTURE_WRAP_S,
-            gl::CLAMP_TO_EDGE as GLint,
-        );
-        gl::TexParameteri(
-            gl::TEXTURE_CUBE_MAP,
-            gl::TEXTURE_WRAP_T,
-            gl::CLAMP_TO_EDGE as GLint,
-        );
-        gl::TexParameteri(
-            gl::TEXTURE_CUBE_MAP,
-            gl::TEXTURE_WRAP_R,
-            gl::CLAMP_TO_EDGE as GLint,
-        );
-        gl::TexParameteri(
-            gl::TEXTURE_CUBE_MAP,
-            gl::TEXTURE_MIN_FILTER,
-            gl::LINEAR as GLint,
-        );
-        gl::TexParameteri(
-            gl::TEXTURE_CUBE_MAP,
-            gl::TEXTURE_MAG_FILTER,
-            gl::LINEAR as GLint,
-        );
-    }
-    let skybox_shader = ShaderProgram::new(SKYBOX_VERTEX_SHADER, SKYBOX_FRAGMENT_SHADER).unwrap();
-    unsafe {
-        skybox_shader.use_program();
-        skybox_shader.set_uniform_int("skybox", 0);
-    }
+    let shader_program =
+        ShaderProgram::new(VERTEX_SHADER, FRAGMENT_SHADER, Some(GEOMETRY_SHADER)).unwrap();
 
     let mut prev_frame_time = Instant::now();
     let mut delta_time = 0.0f32;
@@ -272,42 +201,11 @@ fn main() {
                     gl::ClearColor(0.1, 0.1, 0.1, 1.0);
                     gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
-                    let view = camera.view_matrix();
-                    let projection = glm::perspective(
-                        window_size.width as f32 / window_size.height as f32,
-                        camera.fov().to_radians(),
-                        0.1,
-                        100.0,
-                    );
-
-                    gl::ActiveTexture(gl::TEXTURE0);
-                    gl::BindTexture(gl::TEXTURE_CUBE_MAP, skybox_texture);
-
-                    envmap_shader.use_program();
-                    envmap_shader.set_uniform_mat4f("view", view);
-                    envmap_shader.set_uniform_mat4f("projection", projection);
-                    envmap_shader.set_uniform_vec3f("viewPos", camera.position());
-
-                    gl::Enable(gl::CULL_FACE);
+                    shader_program.use_program();
                     gl::BindVertexArray(vaos[0]);
-                    let model = glm::Mat4::identity();
-                    envmap_shader.set_uniform_mat4f("model", model);
-                    gl::DrawArrays(gl::TRIANGLES, 0, cube_vertices.len() as GLint);
-                    gl::Disable(gl::CULL_FACE);
+                    gl::DrawArrays(gl::POINTS, 0, points.len() as GLsizei);
 
-                    let skybox_view = glm::mat3_to_mat4(&glm::mat4_to_mat3(&view));
-
-                    skybox_shader.use_program();
-                    skybox_shader.set_uniform_mat4f("view", skybox_view);
-                    skybox_shader.set_uniform_mat4f("projection", projection);
-
-                    gl::DepthFunc(gl::LEQUAL);
-                    gl::BindVertexArray(vaos[1]);
-                    gl::DrawArrays(gl::TRIANGLES, 0, skybox_vertices.len() as GLsizei);
-
-                    gl::DepthFunc(gl::LESS);
                     gl::BindVertexArray(0);
-                    gl::BindTexture(gl::TEXTURE_2D, 0);
                 }
                 context.swap_buffers().unwrap();
             }
@@ -322,490 +220,6 @@ fn main() {
 
 #[repr(C, packed)]
 struct Vertex {
-    position: glm::Vec3,
-}
-
-fn skybox_vertices() -> Vec<Vertex> {
-    vec![
-        Vertex {
-            position: glm::vec3(-1.0, 1.0, -1.0),
-        },
-        Vertex {
-            position: glm::vec3(-1.0, -1.0, -1.0),
-        },
-        Vertex {
-            position: glm::vec3(1.0, -1.0, -1.0),
-        },
-        Vertex {
-            position: glm::vec3(1.0, -1.0, -1.0),
-        },
-        Vertex {
-            position: glm::vec3(1.0, 1.0, -1.0),
-        },
-        Vertex {
-            position: glm::vec3(-1.0, 1.0, -1.0),
-        },
-        Vertex {
-            position: glm::vec3(-1.0, -1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(-1.0, -1.0, -1.0),
-        },
-        Vertex {
-            position: glm::vec3(-1.0, 1.0, -1.0),
-        },
-        Vertex {
-            position: glm::vec3(-1.0, 1.0, -1.0),
-        },
-        Vertex {
-            position: glm::vec3(-1.0, 1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(-1.0, -1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(1.0, -1.0, -1.0),
-        },
-        Vertex {
-            position: glm::vec3(1.0, -1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(1.0, 1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(1.0, 1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(1.0, 1.0, -1.0),
-        },
-        Vertex {
-            position: glm::vec3(1.0, -1.0, -1.0),
-        },
-        Vertex {
-            position: glm::vec3(-1.0, -1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(-1.0, 1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(1.0, 1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(1.0, 1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(1.0, -1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(-1.0, -1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(-1.0, 1.0, -1.0),
-        },
-        Vertex {
-            position: glm::vec3(1.0, 1.0, -1.0),
-        },
-        Vertex {
-            position: glm::vec3(1.0, 1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(1.0, 1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(-1.0, 1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(-1.0, 1.0, -1.0),
-        },
-        Vertex {
-            position: glm::vec3(-1.0, -1.0, -1.0),
-        },
-        Vertex {
-            position: glm::vec3(-1.0, -1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(1.0, -1.0, -1.0),
-        },
-        Vertex {
-            position: glm::vec3(1.0, -1.0, -1.0),
-        },
-        Vertex {
-            position: glm::vec3(-1.0, -1.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec3(1.0, -1.0, 1.0),
-        },
-    ]
-}
-
-#[repr(C, packed)]
-struct NormalVertex {
-    position: glm::Vec3,
-    normal: glm::Vec3,
-}
-
-fn cube_normal_vertices() -> Vec<NormalVertex> {
-    vec![
-        // back
-        NormalVertex {
-            position: glm::vec3(-0.5, -0.5, -0.5),
-            normal: glm::vec3(0.0, 0.0, -1.0),
-        },
-        NormalVertex {
-            position: glm::vec3(0.5, 0.5, -0.5),
-            normal: glm::vec3(0.0, 0.0, -1.0),
-        },
-        NormalVertex {
-            position: glm::vec3(0.5, -0.5, -0.5),
-            normal: glm::vec3(0.0, 0.0, -1.0),
-        },
-        NormalVertex {
-            position: glm::vec3(0.5, 0.5, -0.5),
-            normal: glm::vec3(0.0, 0.0, -1.0),
-        },
-        NormalVertex {
-            position: glm::vec3(-0.5, -0.5, -0.5),
-            normal: glm::vec3(0.0, 0.0, -1.0),
-        },
-        NormalVertex {
-            position: glm::vec3(-0.5, 0.5, -0.5),
-            normal: glm::vec3(0.0, 0.0, -1.0),
-        },
-        // front
-        NormalVertex {
-            position: glm::vec3(-0.5, -0.5, 0.5),
-            normal: glm::vec3(0.0, 0.0, 1.0),
-        },
-        NormalVertex {
-            position: glm::vec3(0.5, -0.5, 0.5),
-            normal: glm::vec3(0.0, 0.0, 1.0),
-        },
-        NormalVertex {
-            position: glm::vec3(0.5, 0.5, 0.5),
-            normal: glm::vec3(0.0, 0.0, 1.0),
-        },
-        NormalVertex {
-            position: glm::vec3(0.5, 0.5, 0.5),
-            normal: glm::vec3(0.0, 0.0, 1.0),
-        },
-        NormalVertex {
-            position: glm::vec3(-0.5, 0.5, 0.5),
-            normal: glm::vec3(0.0, 0.0, 1.0),
-        },
-        NormalVertex {
-            position: glm::vec3(-0.5, -0.5, 0.5),
-            normal: glm::vec3(0.0, 0.0, 1.0),
-        },
-        // left
-        NormalVertex {
-            position: glm::vec3(-0.5, 0.5, 0.5),
-            normal: glm::vec3(-1.0, 0.0, 0.0),
-        },
-        NormalVertex {
-            position: glm::vec3(-0.5, 0.5, -0.5),
-            normal: glm::vec3(-1.0, 0.0, 0.0),
-        },
-        NormalVertex {
-            position: glm::vec3(-0.5, -0.5, -0.5),
-            normal: glm::vec3(-1.0, 0.0, 0.0),
-        },
-        NormalVertex {
-            position: glm::vec3(-0.5, -0.5, -0.5),
-            normal: glm::vec3(-1.0, 0.0, 0.0),
-        },
-        NormalVertex {
-            position: glm::vec3(-0.5, -0.5, 0.5),
-            normal: glm::vec3(-1.0, 0.0, 0.0),
-        },
-        NormalVertex {
-            position: glm::vec3(-0.5, 0.5, 0.5),
-            normal: glm::vec3(-1.0, 0.0, 0.0),
-        },
-        // right
-        NormalVertex {
-            position: glm::vec3(0.5, 0.5, 0.5),
-            normal: glm::vec3(1.0, 0.0, 0.0),
-        },
-        NormalVertex {
-            position: glm::vec3(0.5, -0.5, -0.5),
-            normal: glm::vec3(1.0, 0.0, 0.0),
-        },
-        NormalVertex {
-            position: glm::vec3(0.5, 0.5, -0.5),
-            normal: glm::vec3(1.0, 0.0, 0.0),
-        },
-        NormalVertex {
-            position: glm::vec3(0.5, -0.5, -0.5),
-            normal: glm::vec3(1.0, 0.0, 0.0),
-        },
-        NormalVertex {
-            position: glm::vec3(0.5, 0.5, 0.5),
-            normal: glm::vec3(1.0, 0.0, 0.0),
-        },
-        NormalVertex {
-            position: glm::vec3(0.5, -0.5, 0.5),
-            normal: glm::vec3(1.0, 0.0, 0.0),
-        },
-        // bottom
-        NormalVertex {
-            position: glm::vec3(-0.5, -0.5, -0.5),
-            normal: glm::vec3(0.0, -1.0, 0.0),
-        },
-        NormalVertex {
-            position: glm::vec3(0.5, -0.5, -0.5),
-            normal: glm::vec3(0.0, -1.0, 0.0),
-        },
-        NormalVertex {
-            position: glm::vec3(0.5, -0.5, 0.5),
-            normal: glm::vec3(0.0, -1.0, 0.0),
-        },
-        NormalVertex {
-            position: glm::vec3(0.5, -0.5, 0.5),
-            normal: glm::vec3(0.0, -1.0, 0.0),
-        },
-        NormalVertex {
-            position: glm::vec3(-0.5, -0.5, 0.5),
-            normal: glm::vec3(0.0, -1.0, 0.0),
-        },
-        NormalVertex {
-            position: glm::vec3(-0.5, -0.5, -0.5),
-            normal: glm::vec3(0.0, -1.0, 0.0),
-        },
-        // top
-        NormalVertex {
-            position: glm::vec3(-0.5, 0.5, -0.5),
-            normal: glm::vec3(0.0, 1.0, 0.0),
-        },
-        NormalVertex {
-            position: glm::vec3(0.5, 0.5, 0.5),
-            normal: glm::vec3(0.0, 1.0, 0.0),
-        },
-        NormalVertex {
-            position: glm::vec3(0.5, 0.5, -0.5),
-            normal: glm::vec3(0.0, 1.0, 0.0),
-        },
-        NormalVertex {
-            position: glm::vec3(0.5, 0.5, 0.5),
-            normal: glm::vec3(0.0, 1.0, 0.0),
-        },
-        NormalVertex {
-            position: glm::vec3(-0.5, 0.5, -0.5),
-            normal: glm::vec3(0.0, 1.0, 0.0),
-        },
-        NormalVertex {
-            position: glm::vec3(-0.5, 0.5, 0.5),
-            normal: glm::vec3(0.0, 1.0, 0.0),
-        },
-    ]
-}
-
-#[repr(C, packed)]
-struct TexVertex {
-    position: glm::Vec3,
-    tex_coord: glm::Vec2,
-}
-
-fn cube_vertices() -> Vec<TexVertex> {
-    vec![
-        // back
-        TexVertex {
-            position: glm::vec3(-0.5, -0.5, -0.5),
-            tex_coord: glm::vec2(0.0, 0.0),
-        },
-        TexVertex {
-            position: glm::vec3(0.5, 0.5, -0.5),
-            tex_coord: glm::vec2(1.0, 1.0),
-        },
-        TexVertex {
-            position: glm::vec3(0.5, -0.5, -0.5),
-            tex_coord: glm::vec2(1.0, 0.0),
-        },
-        TexVertex {
-            position: glm::vec3(0.5, 0.5, -0.5),
-            tex_coord: glm::vec2(1.0, 1.0),
-        },
-        TexVertex {
-            position: glm::vec3(-0.5, -0.5, -0.5),
-            tex_coord: glm::vec2(0.0, 0.0),
-        },
-        TexVertex {
-            position: glm::vec3(-0.5, 0.5, -0.5),
-            tex_coord: glm::vec2(0.0, 1.0),
-        },
-        // front
-        TexVertex {
-            position: glm::vec3(-0.5, -0.5, 0.5),
-            tex_coord: glm::vec2(0.0, 0.0),
-        },
-        TexVertex {
-            position: glm::vec3(0.5, -0.5, 0.5),
-            tex_coord: glm::vec2(1.0, 0.0),
-        },
-        TexVertex {
-            position: glm::vec3(0.5, 0.5, 0.5),
-            tex_coord: glm::vec2(1.0, 1.0),
-        },
-        TexVertex {
-            position: glm::vec3(0.5, 0.5, 0.5),
-            tex_coord: glm::vec2(1.0, 1.0),
-        },
-        TexVertex {
-            position: glm::vec3(-0.5, 0.5, 0.5),
-            tex_coord: glm::vec2(0.0, 1.0),
-        },
-        TexVertex {
-            position: glm::vec3(-0.5, -0.5, 0.5),
-            tex_coord: glm::vec2(0.0, 0.0),
-        },
-        // left
-        TexVertex {
-            position: glm::vec3(-0.5, -0.5, -0.5),
-            tex_coord: glm::vec2(0.0, 1.0),
-        },
-        TexVertex {
-            position: glm::vec3(-0.5, 0.5, 0.5),
-            tex_coord: glm::vec2(1.0, 0.0),
-        },
-        TexVertex {
-            position: glm::vec3(-0.5, 0.5, -0.5),
-            tex_coord: glm::vec2(1.0, 1.0),
-        },
-        TexVertex {
-            position: glm::vec3(-0.5, 0.5, 0.5),
-            tex_coord: glm::vec2(1.0, 0.0),
-        },
-        TexVertex {
-            position: glm::vec3(-0.5, -0.5, -0.5),
-            tex_coord: glm::vec2(0.0, 1.0),
-        },
-        TexVertex {
-            position: glm::vec3(-0.5, -0.5, 0.5),
-            tex_coord: glm::vec2(0.0, 0.0),
-        },
-        // right
-        TexVertex {
-            position: glm::vec3(0.5, -0.5, -0.5),
-            tex_coord: glm::vec2(0.0, 1.0),
-        },
-        TexVertex {
-            position: glm::vec3(0.5, 0.5, -0.5),
-            tex_coord: glm::vec2(1.0, 1.0),
-        },
-        TexVertex {
-            position: glm::vec3(0.5, 0.5, 0.5),
-            tex_coord: glm::vec2(1.0, 0.0),
-        },
-        TexVertex {
-            position: glm::vec3(0.5, 0.5, 0.5),
-            tex_coord: glm::vec2(1.0, 0.0),
-        },
-        TexVertex {
-            position: glm::vec3(0.5, -0.5, 0.5),
-            tex_coord: glm::vec2(0.0, 0.0),
-        },
-        TexVertex {
-            position: glm::vec3(0.5, -0.5, -0.5),
-            tex_coord: glm::vec2(0.0, 1.0),
-        },
-        // bottom
-        TexVertex {
-            position: glm::vec3(-0.5, -0.5, -0.5),
-            tex_coord: glm::vec2(0.0, 1.0),
-        },
-        TexVertex {
-            position: glm::vec3(0.5, -0.5, -0.5),
-            tex_coord: glm::vec2(1.0, 1.0),
-        },
-        TexVertex {
-            position: glm::vec3(0.5, -0.5, 0.5),
-            tex_coord: glm::vec2(1.0, 0.0),
-        },
-        TexVertex {
-            position: glm::vec3(0.5, -0.5, 0.5),
-            tex_coord: glm::vec2(1.0, 0.0),
-        },
-        TexVertex {
-            position: glm::vec3(-0.5, -0.5, 0.5),
-            tex_coord: glm::vec2(0.0, 0.0),
-        },
-        TexVertex {
-            position: glm::vec3(-0.5, -0.5, -0.5),
-            tex_coord: glm::vec2(0.0, 1.0),
-        },
-        // top
-        TexVertex {
-            position: glm::vec3(-0.5, 0.5, -0.5),
-            tex_coord: glm::vec2(0.0, 1.0),
-        },
-        TexVertex {
-            position: glm::vec3(0.5, 0.5, 0.5),
-            tex_coord: glm::vec2(1.0, 0.0),
-        },
-        TexVertex {
-            position: glm::vec3(0.5, 0.5, -0.5),
-            tex_coord: glm::vec2(1.0, 1.0),
-        },
-        TexVertex {
-            position: glm::vec3(0.5, 0.5, 0.5),
-            tex_coord: glm::vec2(1.0, 0.0),
-        },
-        TexVertex {
-            position: glm::vec3(-0.5, 0.5, -0.5),
-            tex_coord: glm::vec2(0.0, 1.0),
-        },
-        TexVertex {
-            position: glm::vec3(-0.5, 0.5, 0.5),
-            tex_coord: glm::vec2(0.0, 0.0),
-        },
-    ]
-}
-
-fn plane_vertices() -> Vec<TexVertex> {
-    vec![
-        TexVertex {
-            position: glm::vec3(5.0, -0.5, 5.0),
-            tex_coord: glm::vec2(2.0, 0.0),
-        },
-        TexVertex {
-            position: glm::vec3(-5.0, -0.5, 5.0),
-            tex_coord: glm::vec2(0.0, 0.0),
-        },
-        TexVertex {
-            position: glm::vec3(-5.0, -0.5, -5.0),
-            tex_coord: glm::vec2(0.0, 2.0),
-        },
-        TexVertex {
-            position: glm::vec3(5.0, -0.5, 5.0),
-            tex_coord: glm::vec2(2.0, 0.0),
-        },
-        TexVertex {
-            position: glm::vec3(-5.0, -0.5, -5.0),
-            tex_coord: glm::vec2(0.0, 2.0),
-        },
-        TexVertex {
-            position: glm::vec3(5.0, -0.5, -5.0),
-            tex_coord: glm::vec2(2.0, 2.0),
-        },
-    ]
-}
-
-fn quad_vertices(x_size: f32, y_size: f32) -> Vec<TexVertex> {
-    vec![
-        TexVertex {
-            position: glm::vec3(-x_size, -y_size, 0.0),
-            tex_coord: glm::vec2(0.0, 0.0),
-        },
-        TexVertex {
-            position: glm::vec3(x_size, -y_size, 0.0),
-            tex_coord: glm::vec2(1.0, 0.0),
-        },
-        TexVertex {
-            position: glm::vec3(-x_size, y_size, 0.0),
-            tex_coord: glm::vec2(0.0, 1.0),
-        },
-        TexVertex {
-            position: glm::vec3(x_size, y_size, 0.0),
-            tex_coord: glm::vec2(1.0, 1.0),
-        },
-    ]
+    position: glm::Vec2,
+    color: glm::Vec3,
 }
