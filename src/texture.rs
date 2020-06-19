@@ -14,7 +14,7 @@ impl Texture {
     where
         P: AsRef<Path>,
     {
-        let image = image::open(path)?.flipv();
+        let image = image::open(path)?;
         let (width, height) = image.dimensions();
         let raw = image.into_rgba().into_raw();
 

@@ -3,13 +3,10 @@ mod model;
 mod shader_program;
 mod texture;
 
-use std::ffi::c_void;
-use std::mem;
 use std::time::Instant;
 
 use gl::types::*;
 use glutin::{Api, ContextBuilder, GlProfile, GlRequest};
-use memoffset::offset_of;
 use nalgebra_glm as glm;
 use winit::{
     event::{DeviceEvent, ElementState, Event, MouseScrollDelta, VirtualKeyCode, WindowEvent},
@@ -18,6 +15,7 @@ use winit::{
 };
 
 use camera::{Camera, CameraMotion};
+use model::Model;
 use shader_program::ShaderProgram;
 
 const VERTEX_SHADER: &str = include_str!("shaders/basic.vert");
@@ -53,61 +51,22 @@ fn main() {
         context.swap_buffers().unwrap();
     }
 
-    let points = [
-        Vertex {
-            position: glm::vec2(0.5, 0.5),
-            color: glm::vec3(1.0, 0.0, 0.0),
-        },
-        Vertex {
-            position: glm::vec2(0.5, -0.5),
-            color: glm::vec3(0.0, 1.0, 0.0),
-        },
-        Vertex {
-            position: glm::vec2(-0.5, -0.5),
-            color: glm::vec3(0.0, 0.0, 1.0),
-        },
-        Vertex {
-            position: glm::vec2(-0.5, 0.5),
-            color: glm::vec3(1.0, 1.0, 0.0),
-        },
-    ];
-
-    let mut vaos = [0; 1];
-    let mut vbos = [0; 1];
-    unsafe {
-        gl::GenVertexArrays(vaos.len() as GLsizei, vaos.as_mut_ptr());
-        gl::GenBuffers(vbos.len() as GLsizei, vbos.as_mut_ptr());
-
-        gl::BindVertexArray(vaos[0]);
-        gl::BindBuffer(gl::ARRAY_BUFFER, vbos[0]);
-        gl::BufferData(
-            gl::ARRAY_BUFFER,
-            (points.len() * mem::size_of::<Vertex>()) as GLsizeiptr,
-            points.as_ptr() as *const c_void,
-            gl::STATIC_DRAW,
-        );
-        gl::VertexAttribPointer(
-            0,
-            2,
-            gl::FLOAT,
-            gl::FALSE,
-            mem::size_of::<Vertex>() as GLsizei,
-            offset_of!(Vertex, position) as *const c_void,
-        );
-        gl::EnableVertexAttribArray(0);
-        gl::VertexAttribPointer(
-            1,
-            3,
-            gl::FLOAT,
-            gl::FALSE,
-            mem::size_of::<Vertex>() as GLsizei,
-            offset_of!(Vertex, color) as *const c_void,
-        );
-        gl::EnableVertexAttribArray(1);
-    }
+    let backpack_model = unsafe { Model::load("resources/models/backpack/backpack.obj").unwrap() };
 
     let shader_program =
         ShaderProgram::new(VERTEX_SHADER, FRAGMENT_SHADER, Some(GEOMETRY_SHADER)).unwrap();
+    unsafe {
+        shader_program.use_program();
+        shader_program.set_uniform_float("material.shininess", 32.0);
+        let direction = glm::normalize(&glm::vec3(0.0, -1.0, -0.5));
+        shader_program.set_uniform_vec3f("directionalLight.direction", direction);
+        let specular = glm::vec3(1.0, 1.0, 1.0);
+        let diffuse = specular * 0.5;
+        let ambient = diffuse * 0.2;
+        shader_program.set_uniform_vec3f("directionalLight.ambient", ambient);
+        shader_program.set_uniform_vec3f("directionalLight.diffuse", diffuse);
+        shader_program.set_uniform_vec3f("directionalLight.specular", specular);
+    }
 
     let mut prev_frame_time = Instant::now();
     let mut delta_time = 0.0f32;
@@ -197,29 +156,30 @@ fn main() {
                 camera.zoom(scroll_delta);
                 scroll_delta = 0.0;
 
+                let view = camera.view_matrix();
+                let projection = glm::perspective(
+                    window_size.width as f32 / window_size.height as f32,
+                    (45.0f32).to_radians(),
+                    0.1,
+                    100.0,
+                );
+
                 unsafe {
                     gl::ClearColor(0.1, 0.1, 0.1, 1.0);
                     gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
                     shader_program.use_program();
-                    gl::BindVertexArray(vaos[0]);
-                    gl::DrawArrays(gl::POINTS, 0, points.len() as GLsizei);
-
-                    gl::BindVertexArray(0);
+                    let model = glm::Mat4::identity();
+                    shader_program.set_uniform_float("time", time);
+                    shader_program.set_uniform_mat4f("model", model);
+                    shader_program.set_uniform_mat4f("view", view);
+                    shader_program.set_uniform_mat4f("projection", projection);
+                    backpack_model.draw(&shader_program);
                 }
                 context.swap_buffers().unwrap();
             }
-            Event::LoopDestroyed => unsafe {
-                gl::DeleteVertexArrays(vaos.len() as GLint, vaos.as_ptr());
-                gl::DeleteBuffers(vbos.len() as GLint, vbos.as_ptr());
-            },
+            Event::LoopDestroyed => {}
             _ => {}
         }
     });
-}
-
-#[repr(C, packed)]
-struct Vertex {
-    position: glm::Vec2,
-    color: glm::Vec3,
 }
