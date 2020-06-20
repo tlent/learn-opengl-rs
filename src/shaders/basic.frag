@@ -6,7 +6,7 @@ struct Material {
 
 uniform Material material;
 
-in GS_OUT {
+in VS_OUT {
     vec2 TexCoord;
 } fs_in;
 

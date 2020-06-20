@@ -20,7 +20,10 @@ use shader_program::ShaderProgram;
 
 const VERTEX_SHADER: &str = include_str!("shaders/basic.vert");
 const FRAGMENT_SHADER: &str = include_str!("shaders/basic.frag");
-const GEOMETRY_SHADER: &str = include_str!("shaders/basic.geom");
+
+const NORM_VERTEX_SHADER: &str = include_str!("shaders/normal_visualizer.vert");
+const NORM_FRAGMENT_SHADER: &str = include_str!("shaders/normal_visualizer.frag");
+const NORM_GEOMETRY_SHADER: &str = include_str!("shaders/normal_visualizer.geom");
 
 const MULTISAMPLING_SAMPLES: u16 = 4;
 
@@ -53,20 +56,13 @@ fn main() {
 
     let backpack_model = unsafe { Model::load("resources/models/backpack/backpack.obj").unwrap() };
 
-    let shader_program =
-        ShaderProgram::new(VERTEX_SHADER, FRAGMENT_SHADER, Some(GEOMETRY_SHADER)).unwrap();
-    unsafe {
-        shader_program.use_program();
-        shader_program.set_uniform_float("material.shininess", 32.0);
-        let direction = glm::normalize(&glm::vec3(0.0, -1.0, -0.5));
-        shader_program.set_uniform_vec3f("directionalLight.direction", direction);
-        let specular = glm::vec3(1.0, 1.0, 1.0);
-        let diffuse = specular * 0.5;
-        let ambient = diffuse * 0.2;
-        shader_program.set_uniform_vec3f("directionalLight.ambient", ambient);
-        shader_program.set_uniform_vec3f("directionalLight.diffuse", diffuse);
-        shader_program.set_uniform_vec3f("directionalLight.specular", specular);
-    }
+    let basic_shader = ShaderProgram::new(VERTEX_SHADER, FRAGMENT_SHADER, None).unwrap();
+    let normal_shader = ShaderProgram::new(
+        NORM_VERTEX_SHADER,
+        NORM_FRAGMENT_SHADER,
+        Some(NORM_GEOMETRY_SHADER),
+    )
+    .unwrap();
 
     let mut prev_frame_time = Instant::now();
     let mut delta_time = 0.0f32;
@@ -168,13 +164,19 @@ fn main() {
                     gl::ClearColor(0.1, 0.1, 0.1, 1.0);
                     gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
-                    shader_program.use_program();
+                    basic_shader.use_program();
                     let model = glm::Mat4::identity();
-                    shader_program.set_uniform_float("time", time);
-                    shader_program.set_uniform_mat4f("model", model);
-                    shader_program.set_uniform_mat4f("view", view);
-                    shader_program.set_uniform_mat4f("projection", projection);
-                    backpack_model.draw(&shader_program);
+                    basic_shader.set_uniform_mat4f("model", model);
+                    basic_shader.set_uniform_mat4f("view", view);
+                    basic_shader.set_uniform_mat4f("projection", projection);
+                    backpack_model.draw(&basic_shader);
+
+                    normal_shader.use_program();
+                    let model = glm::Mat4::identity();
+                    normal_shader.set_uniform_mat4f("model", model);
+                    normal_shader.set_uniform_mat4f("view", view);
+                    normal_shader.set_uniform_mat4f("projection", projection);
+                    backpack_model.draw(&normal_shader);
                 }
                 context.swap_buffers().unwrap();
             }
