@@ -3,36 +3,34 @@ mod model;
 mod shader_program;
 mod texture;
 
+use std::ffi::c_void;
+use std::mem;
 use std::time::Instant;
 
 use gl::types::*;
 use glutin::{Api, ContextBuilder, GlProfile, GlRequest};
+use memoffset::offset_of;
 use nalgebra_glm as glm;
 use winit::{
+    dpi::LogicalSize,
     event::{DeviceEvent, ElementState, Event, MouseScrollDelta, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
-    window::{Fullscreen, WindowBuilder},
+    window::WindowBuilder,
 };
 
 use camera::{Camera, CameraMotion};
-use model::Model;
 use shader_program::ShaderProgram;
 
-const VERTEX_SHADER: &str = include_str!("shaders/basic.vert");
-const FRAGMENT_SHADER: &str = include_str!("shaders/basic.frag");
-
-const NORM_VERTEX_SHADER: &str = include_str!("shaders/normal_visualizer.vert");
-const NORM_FRAGMENT_SHADER: &str = include_str!("shaders/normal_visualizer.frag");
-const NORM_GEOMETRY_SHADER: &str = include_str!("shaders/normal_visualizer.geom");
+const VERTEX_SHADER: &str = include_str!("shaders/main.vert");
+const FRAGMENT_SHADER: &str = include_str!("shaders/main.frag");
 
 const MULTISAMPLING_SAMPLES: u16 = 4;
 
 fn main() {
     let event_loop = EventLoop::new();
-    let monitor = event_loop.primary_monitor();
     let window_builder = WindowBuilder::new()
         .with_title("Learn OpenGL")
-        .with_fullscreen(Some(Fullscreen::Borderless(monitor)));
+        .with_inner_size(LogicalSize::new(800, 600));
     let context = ContextBuilder::new()
         .with_gl(GlRequest::Specific(Api::OpenGl, (3, 3)))
         .with_gl_profile(GlProfile::Core)
@@ -54,15 +52,88 @@ fn main() {
         context.swap_buffers().unwrap();
     }
 
-    let backpack_model = unsafe { Model::load("resources/models/backpack/backpack.obj").unwrap() };
+    let size = 0.05;
+    let quad_vertices = [
+        Vertex {
+            position: glm::vec2(-size, size),
+            color: glm::vec3(1.0, 0.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec2(-size, -size),
+            color: glm::vec3(0.0, 0.0, 1.0),
+        },
+        Vertex {
+            position: glm::vec2(size, size),
+            color: glm::vec3(0.0, 1.0, 1.0),
+        },
+        Vertex {
+            position: glm::vec2(size, -size),
+            color: glm::vec3(0.0, 1.0, 0.0),
+        },
+    ];
+    let mut offsets = [glm::vec2(0.0, 0.0); 100];
+    let offset = 0.1;
+    for (i, v) in offsets.iter_mut().enumerate() {
+        let x = i % 10;
+        let y = i / 10;
+        let x = (x as f32 - 5.0) / 5.0 + offset;
+        let y = (y as f32 - 5.0) / 5.0 + offset;
+        *v = glm::vec2(x, y);
+    }
 
-    let basic_shader = ShaderProgram::new(VERTEX_SHADER, FRAGMENT_SHADER, None).unwrap();
-    let normal_shader = ShaderProgram::new(
-        NORM_VERTEX_SHADER,
-        NORM_FRAGMENT_SHADER,
-        Some(NORM_GEOMETRY_SHADER),
-    )
-    .unwrap();
+    let mut vao = 0;
+    let mut vbos = [0; 2];
+    unsafe {
+        gl::GenVertexArrays(1, &mut vao);
+        gl::GenBuffers(vbos.len() as GLsizei, vbos.as_mut_ptr());
+
+        gl::BindVertexArray(vao);
+        gl::BindBuffer(gl::ARRAY_BUFFER, vbos[0]);
+        gl::BufferData(
+            gl::ARRAY_BUFFER,
+            (quad_vertices.len() * mem::size_of::<Vertex>()) as GLsizeiptr,
+            quad_vertices.as_ptr() as *const c_void,
+            gl::STATIC_DRAW,
+        );
+        gl::VertexAttribPointer(
+            0,
+            2,
+            gl::FLOAT,
+            gl::FALSE,
+            mem::size_of::<Vertex>() as GLsizei,
+            offset_of!(Vertex, position) as *const c_void,
+        );
+        gl::EnableVertexAttribArray(0);
+        gl::VertexAttribPointer(
+            1,
+            3,
+            gl::FLOAT,
+            gl::FALSE,
+            mem::size_of::<Vertex>() as GLsizei,
+            offset_of!(Vertex, color) as *const c_void,
+        );
+        gl::EnableVertexAttribArray(1);
+
+        gl::BindBuffer(gl::ARRAY_BUFFER, vbos[1]);
+        gl::BufferData(
+            gl::ARRAY_BUFFER,
+            (offsets.len() * mem::size_of::<glm::Vec2>()) as GLsizeiptr,
+            offsets.as_ptr() as *const c_void,
+            gl::STATIC_DRAW,
+        );
+        gl::VertexAttribPointer(
+            2,
+            2,
+            gl::FLOAT,
+            gl::FALSE,
+            mem::size_of::<glm::Vec2>() as GLsizei,
+            0 as *const c_void,
+        );
+        gl::VertexAttribDivisor(2, 1);
+        gl::EnableVertexAttribArray(2);
+    }
+
+    let main_shader = ShaderProgram::new(VERTEX_SHADER, FRAGMENT_SHADER, None).unwrap();
 
     let mut prev_frame_time = Instant::now();
     let mut delta_time = 0.0f32;
@@ -152,31 +223,18 @@ fn main() {
                 camera.zoom(scroll_delta);
                 scroll_delta = 0.0;
 
-                let view = camera.view_matrix();
-                let projection = glm::perspective(
-                    window_size.width as f32 / window_size.height as f32,
-                    (45.0f32).to_radians(),
-                    0.1,
-                    100.0,
-                );
-
                 unsafe {
                     gl::ClearColor(0.1, 0.1, 0.1, 1.0);
                     gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
-                    basic_shader.use_program();
-                    let model = glm::Mat4::identity();
-                    basic_shader.set_uniform_mat4f("model", model);
-                    basic_shader.set_uniform_mat4f("view", view);
-                    basic_shader.set_uniform_mat4f("projection", projection);
-                    backpack_model.draw(&basic_shader);
-
-                    normal_shader.use_program();
-                    let model = glm::Mat4::identity();
-                    normal_shader.set_uniform_mat4f("model", model);
-                    normal_shader.set_uniform_mat4f("view", view);
-                    normal_shader.set_uniform_mat4f("projection", projection);
-                    backpack_model.draw(&normal_shader);
+                    main_shader.use_program();
+                    gl::BindVertexArray(vao);
+                    gl::DrawArraysInstanced(
+                        gl::TRIANGLE_STRIP,
+                        0,
+                        quad_vertices.len() as GLsizei,
+                        offsets.len() as GLsizei,
+                    );
                 }
                 context.swap_buffers().unwrap();
             }
@@ -184,4 +242,10 @@ fn main() {
             _ => {}
         }
     });
+}
+
+#[repr(C, packed)]
+struct Vertex {
+    position: glm::Vec2,
+    color: glm::Vec3,
 }
