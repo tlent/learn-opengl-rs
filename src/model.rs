@@ -12,7 +12,7 @@ use crate::shader_program::ShaderProgram;
 use crate::texture::Texture;
 
 pub struct Model {
-    meshes: Vec<Mesh>,
+    pub meshes: Vec<Mesh>,
 }
 
 impl Model {
@@ -96,12 +96,12 @@ impl Model {
 }
 
 #[derive(Debug)]
-struct Mesh {
+pub struct Mesh {
     vertices: Vec<Vertex>,
-    indices: Vec<u32>,
-    diffuse_textures: Vec<Rc<Texture>>,
+    pub indices: Vec<u32>,
+    pub diffuse_textures: Vec<Rc<Texture>>,
     specular_textures: Vec<Rc<Texture>>,
-    vao: u32,
+    pub vao: u32,
     vbo: u32,
     ebo: u32,
 }
